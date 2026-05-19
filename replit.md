@@ -1,45 +1,67 @@
-# [Project name]
+# Skilnex
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+An online learning platform (formerly Byonsoft) offering courses, AI career mentoring, and subscription management for students.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- `cd byonsoft_extracted/Byonsoft && npm run dev` — start the full app (port 5000, dev mode)
+- `cd byonsoft_extracted/Byonsoft && npm run db:push` — push DB schema changes to Neon
+- `cd byonsoft_extracted/Byonsoft && npm run build` — production build
+- `cd byonsoft_extracted/Byonsoft && npm run start` — start production build
+
+The **"Skilnex App"** workflow runs `npm run dev` automatically on startup.
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Frontend: React + TypeScript + Tailwind CSS + Vite
+- Backend: Node.js + Express + TypeScript (`tsx` for dev, `esbuild` for prod)
+- Database: Neon PostgreSQL + Drizzle ORM
+- AI: Groq API (`llama-3.3-70b-versatile`)
+- Auth: JWT + bcrypt
+- Routing: wouter (client-side)
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- App root: `byonsoft_extracted/Byonsoft/`
+- Server entry: `server/index.ts`
+- Frontend entry: `client/src/main.tsx`
+- DB schema: `shared/schema.ts`
+- Groq AI: `server/groq.ts`
+- API routes: `server/routes.ts`
+
+## Environment Variables / Secrets
+
+All secrets are stored in Replit Secrets (never hardcoded):
+- `DATABASE_URL` — Neon PostgreSQL connection string
+- `GROQ_KEYS` — comma-separated Groq API keys (rotates on rate limit)
+- `SESSION_SECRET` — JWT/session signing secret
+- `NODE_ENV` — set to `development` (env var)
+- `PORT` — set to `5000` (env var)
+
+## Default Admin Account
+
+- Email: `admin@byonsoft.com`
+- Password: `password`
+- Role: admin (auto-seeded on first run)
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Server handles both API and frontend (Vite dev server in dev, static files in prod)
+- Groq key rotation: automatically cycles keys on 429/503 errors
+- DB seeding runs on every startup via `seedDatabase()` using `IF NOT EXISTS` / `ON CONFLICT DO NOTHING` guards
+- `app_settings` table stores global config (subscription price, referral settings)
 
-## Product
+## Fixes Applied
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+1. Removed `reusePort: true` from `httpServer.listen()` — caused startup error on Linux
+2. Moved `ALTER TABLE app_settings` statements to before the 4-column INSERT — prevents "column does not exist" seed error
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- App name is Skilnex (code still references Byonsoft internally)
+- Groq model: `llama-3.3-70b-versatile`
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
-
-## Pointers
-
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- Always run `db:push` from `byonsoft_extracted/Byonsoft/` — the drizzle config is there
+- Production build requires `npm run build` first, then `npm run start`

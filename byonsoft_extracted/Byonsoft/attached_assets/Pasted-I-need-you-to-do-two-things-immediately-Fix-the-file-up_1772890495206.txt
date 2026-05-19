@@ -1,0 +1,28 @@
+I need you to do two things immediately: Fix the file upload error and populate the legal pages with the exact content I provide below.
+​TASK 1: Fix '413 Request Entity Too Large' Error
+The server is rejecting payment screenshots because the file size limit is too low.
+​Increase the upload limit to 10MB.
+​Update Express body-parser: app.use(express.json({ limit: '10mb' })); and app.use(express.urlencoded({ limit: '10mb', extended: true }));
+​If using multer, update the limits: limits: { fileSize: 10 * 1024 * 1024 }.
+​TASK 2: Add Content to Privacy Policy and Terms & Conditions Pages
+Populate the respective static pages (routes) with the exact text provided below. Format them nicely with proper headings and paragraphs.
+​[Start of Privacy Policy Text]
+Privacy Policy for Byonsoft OS
+Effective Date: March 2026
+​Welcome to Byonsoft OS. Your privacy is critically important to us.
+1. Information We Collect: We collect basic account information (Name, Email) and payment proof (Screenshots/Transaction IDs) to activate your premium subscription. We do not store any credit card or sensitive banking data on our servers.
+2. How We Use Your Data: Your information is strictly used to provide you access to our 50+ premium courses, AI Mentor features, and to communicate with you regarding your account.
+3. Data Protection: We implement industry-standard security measures to ensure your data is safe from unauthorized access.
+4. Third-Party Sharing: Byonsoft OS does not sell, trade, or rent your personal information to any third party.
+If you have any questions about this Privacy Policy, please contact us at Byonsoft@gmail.com.
+[End of Privacy Policy Text]
+​[Start of Terms & Conditions Text]
+Terms & Conditions for Byonsoft OS
+​Welcome to Byonsoft OS! By accessing or using our platform, you agree to the following terms:
+1. Subscription & Payments: Byonsoft OS is a premium platform. Access to our complete course library requires a subscription fee (Rs. 750/month). Payments are verified manually via screenshot submission. Account activation may take up to 12-24 hours after submission.
+2. User Conduct: You agree not to share your account credentials with others or distribute our premium course content (videos, materials) on external platforms. Violation of this will result in an immediate permanent ban without refund.
+3. Refund Policy: Due to the digital nature of our courses and instant access to the AI Mentor, all subscription payments are final and non-refundable.
+4. Intellectual Property: All content on Byonsoft OS, including videos, text, and AI tools, is the property of Byonsoft Academy.
+For support, message us on WhatsApp: +923124494267.
+[End of Terms & Conditions Text]
+​Execute these updates and ensure the manual payment screenshot upload works perfectly."
