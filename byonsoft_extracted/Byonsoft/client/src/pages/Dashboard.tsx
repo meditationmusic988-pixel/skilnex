@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -12,7 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   BookOpen, Lock, Zap, TrendingUp, Star, Award, ChevronRight,
   Brain, Activity, LogOut, CheckCircle, Download, User, Phone, FileText, Shield as ShieldIcon,
-  ArrowRight, Trophy, Briefcase, DollarSign, ListOrdered, MessageCircle, X as XIcon
+  Trophy, Briefcase, DollarSign, ListOrdered, MessageCircle, X as XIcon, Target, Users, Rocket
 } from "lucide-react";
 import { MegaLaunchBanner, ReferralCard, ReferralRewards } from "@/components/GiveawayBanner";
 import { PWAInstallButton } from "@/components/PWAInstallButton";
@@ -43,7 +43,7 @@ export default function Dashboard() {
 
   const { data: giveawayStats } = useQuery<{ activeUsers: number; nextMilestone: number; prevMilestone: number }>({
     queryKey: ["/api/giveaway/stats"],
-    refetchInterval: 60_000,
+    staleTime: 1000 * 60 * 5,
   });
   const premiumCount = giveawayStats?.activeUsers ?? 0;
   const isPhase2 = premiumCount >= 300;
@@ -54,7 +54,7 @@ export default function Dashboard() {
     return progressList.find((p) => p.course_id === courseId);
   };
 
-  // ── SMART COURSE PRIORITY ───────────────────────────────────────────────────
+  // ── SMART COURSE PRIORITY ─────────────────────────────────────────────────
   const roadmapSkills = useMemo(() => {
     const raw: string[] = [];
     if (skillScore?.roadmap_result) {
@@ -174,9 +174,72 @@ export default function Dashboard() {
 
   const completedCount = progressList.filter((p) => p.is_completed).length;
 
+  // ── DYNAMIC FIRST CLIENT STEPS based on roadmap skill ────────────────────
+  const primarySkill = roadmapSkills[0] || "";
+  const skillLabel = primarySkill
+    ? primarySkill.split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
+    : "Your Skill";
+
+  const firstClientSteps = [
+    {
+      step: "01",
+      title: `${skillLabel} Portfolio Banao`,
+      body: `${skillLabel} ke 2-3 sample projects banao — real clients na hon to fictional ya self-initiated projects bhi chalte hain. Ek clean PDF ya website pe showcase karo. Yeh tumhara pehla social proof hai.`,
+      color: "from-blue-600 to-blue-700",
+      icon: "🗂️",
+    },
+    {
+      step: "02",
+      title: "Fiverr / Upwork Gig Launch Karo",
+      body: `${skillLabel} service ka ek strong gig banao. Apni specialty clearly likho, shuru mein competitive rate rakho, aur pehle 1-2 free ya discounted orders se 5-star reviews collect karo.`,
+      color: "from-purple-600 to-purple-700",
+      icon: "🚀",
+    },
+    {
+      step: "03",
+      title: "Local Businesses Ko Approach Karo",
+      body: `Apne sheher ke businesses ko WhatsApp ya direct message karo. Batao ke tum unki ${skillLabel} problems solve kar sakte ho. Ek free audit ya sample offer karo — rejection se mat daro.`,
+      color: "from-emerald-600 to-emerald-700",
+      icon: "🏪",
+    },
+    {
+      step: "04",
+      title: "Facebook Groups & LinkedIn Use Karo",
+      body: `${skillLabel} se related Facebook groups join karo. Roz ek helpful post ya answer daalo. Jab log tumhari expertise dekhein ge, woh khud DM karein ge. LinkedIn pe bhi daily activity rakho.`,
+      color: "from-orange-600 to-orange-700",
+      icon: "📱",
+    },
+    {
+      step: "05",
+      title: "Cold Outreach Script",
+      body: `"Hi [Name], maine aapki [profile/website] dekhi — aapko ${skillLabel} mein [specific problem] hai. Main is mein expert hoon aur help kar sakta/sakti hoon. Kya 10 min call ho sakti hai?" Short aur specific rakho.`,
+      color: "from-pink-600 to-pink-700",
+      icon: "✉️",
+    },
+    {
+      step: "06",
+      title: "Referrals Maango",
+      body: `Jab pehla ${skillLabel} client mil jaye aur kaam achha ho, poochho: 'Kya aap mujhe kisi aur ke saath refer kar sakte hain?' Word-of-mouth fastest aur free growth hack hai.`,
+      color: "from-cyan-600 to-cyan-700",
+      icon: "🤝",
+    },
+  ];
+
+  // ── SAVED ROADMAP ─────────────────────────────────────────────────────────
+  let savedRoadmap: {
+    recommended_courses?: string[];
+    career_paths?: string[];
+    expected_income?: string;
+    learning_order?: string;
+  } | null = null;
+  if (skillScore?.roadmap_result) {
+    try { savedRoadmap = JSON.parse(skillScore.roadmap_result); } catch {}
+  }
+
   return (
     <div className="min-h-screen bg-[#0F172A] text-white">
-      {/* Header */}
+
+      {/* ── HEADER ── */}
       <header className="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur-md sticky top-0 z-40 shadow-lg shadow-black/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -239,98 +302,90 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
-        {/* ── PWA INSTALL PROMPT ── */}
+
+        {/* ── PWA INSTALL ── */}
         <PWAInstallButton variant="banner" />
 
-        {/* ── MEGA LAUNCH ROADMAP HERO BANNER ── */}
-        <MegaLaunchBanner
-          isPremium={!!user?.subscription_status}
-          onUpgrade={() => setUpgradeOpen(true)}
-        />
-
-        {/* ── REFERRAL CARD & REWARDS ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <ReferralCard />
-          <ReferralRewards />
-        </div>
-
-        {/* Welcome Banner */}
-        <div className="bg-gradient-to-r from-blue-900/50 to-slate-800/50 rounded-xl p-6 border border-blue-800/30">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold text-white">
-                Welcome back, <span className="text-blue-400">{user?.name}</span>
+        {/* ── WELCOME BANNER ── */}
+        <div className="bg-gradient-to-r from-blue-900/50 to-slate-800/50 rounded-2xl p-5 sm:p-7 border border-blue-800/30">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-2xl font-bold text-white truncate">
+                Welcome back, <span className="text-blue-400">{user?.name}</span> 👋
               </h1>
-              <p className="text-slate-400 mt-1">Continue your high-income skill journey</p>
+              <p className="text-slate-400 text-xs sm:text-sm mt-1">Continue your high-income skill journey</p>
             </div>
-            <div className="flex gap-3 flex-wrap">
+            <div className="flex items-center gap-2 shrink-0">
               {!user?.subscription_status && (
                 <Button
                   data-testid="button-upgrade"
+                  size="sm"
                   onClick={() => setUpgradeOpen(true)}
-                  className="bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold"
+                  className="bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold text-xs px-3"
                 >
-                  <Zap className="w-4 h-4 mr-2" /> Upgrade Rs. {price}/mo
+                  <Zap className="w-3.5 h-3.5 mr-1" />
+                  <span className="hidden sm:inline">Upgrade </span>Rs. {price}
                 </Button>
               )}
               <Button
-                variant="outline"
+                size="sm"
+                variant="ghost"
                 onClick={refreshUser}
-                className="border-slate-600 text-slate-300"
+                className="border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800 px-2.5"
+                title="Refresh Status"
               >
-                <Activity className="w-4 h-4 mr-2" /> Refresh Status
+                <Activity className="w-4 h-4" />
+                <span className="hidden sm:inline ml-1.5 text-xs">Refresh</span>
               </Button>
             </div>
           </div>
         </div>
 
-        {/* Stats Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {/* Dynamic Giveaway Tracker — replaces "Courses Available" */}
+        {/* ── STATS ROW ── */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Card
             data-testid="card-giveaway-tracker"
-            className={`relative overflow-hidden backdrop-blur-sm hover:border-opacity-80 transition-all duration-200 hover:shadow-lg ${
+            className={`relative overflow-hidden backdrop-blur-sm transition-all duration-200 ${
               isPhase2
-                ? "bg-gradient-to-br from-purple-900/40 to-slate-800/50 border-purple-600/50 shadow-purple-900/20"
-                : "bg-gradient-to-br from-yellow-900/30 to-slate-800/50 border-yellow-600/50 shadow-yellow-900/20"
+                ? "bg-gradient-to-br from-purple-900/40 to-slate-800/50 border-purple-600/50"
+                : "bg-gradient-to-br from-yellow-900/30 to-slate-800/50 border-yellow-600/50"
             }`}
           >
             <div className={`absolute inset-x-0 top-0 h-0.5 ${isPhase2 ? "bg-gradient-to-r from-purple-500 to-blue-500" : "bg-gradient-to-r from-yellow-500 to-orange-500"}`} />
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isPhase2 ? "bg-purple-600/30" : "bg-yellow-600/20"}`}>
-                  <Trophy className={`w-5 h-5 ${isPhase2 ? "text-purple-300" : "text-yellow-400"}`} />
+            <CardContent className="p-3 sm:p-4">
+              <div className="flex items-center gap-2">
+                <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 ${isPhase2 ? "bg-purple-600/30" : "bg-yellow-600/20"}`}>
+                  <Trophy className={`w-4 h-4 sm:w-5 sm:h-5 ${isPhase2 ? "text-purple-300" : "text-yellow-400"}`} />
                 </div>
-                <div className="min-w-0">
-                  <p className={`text-sm font-bold leading-tight truncate ${isPhase2 ? "text-purple-200" : "text-yellow-300"}`}>
-                    {isPhase2 ? "Rs. 100,000 💰" : "Rs. 35,000 🏆"}
+                <div className="min-w-0 overflow-hidden">
+                  <p className={`text-xs sm:text-sm font-bold leading-tight truncate ${isPhase2 ? "text-purple-200" : "text-yellow-300"}`}>
+                    {isPhase2 ? "Rs. 1 Lakh" : "Rs. 35,000"}
                   </p>
-                  <p className={`text-xs mt-0.5 ${isPhase2 ? "text-purple-400" : "text-yellow-600"}`}>
+                  <p className={`text-xs truncate ${isPhase2 ? "text-purple-400" : "text-yellow-600"}`}>
                     {isPhase2 ? "Mega Giveaway" : "Phase 1 Giveaway"}
                   </p>
-                  <p className="text-slate-500 text-xs mt-0.5">
-                    {isPhase2 ? "Unlocks at 1000 Members" : "Unlocks at 300 Members"}
+                  <p className="text-slate-500 text-[10px] truncate">
+                    {isPhase2 ? "1000 Members" : "300 Members"}
                   </p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Remaining 3 stat cards */}
           {[
-            { label: "Completed", value: completedCount, icon: Award, color: "text-green-400", glow: "shadow-green-900/20" },
-            { label: "AI Assessment", value: hasAssessment ? "Complete" : "Pending", icon: Star, color: hasAssessment ? "text-green-400" : "text-yellow-400", glow: "shadow-yellow-900/20" },
-            { label: "In Progress", value: progressList.length - completedCount, icon: TrendingUp, color: "text-purple-400", glow: "shadow-purple-900/20" },
+            { label: "Completed", value: completedCount, icon: Award, color: "text-green-400" },
+            { label: "AI Assessment", value: hasAssessment ? "Done ✓" : "Pending", icon: Star, color: hasAssessment ? "text-green-400" : "text-yellow-400" },
+            { label: "In Progress", value: progressList.length - completedCount, icon: TrendingUp, color: "text-purple-400" },
           ].map((stat) => (
-            <Card key={stat.label} className={`bg-slate-800/50 border-slate-700/60 backdrop-blur-sm hover:border-slate-600 transition-all duration-200 hover:shadow-lg ${stat.glow}`}>
-              <CardContent className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-slate-700/60 flex items-center justify-center shrink-0">
-                    <stat.icon className={`w-5 h-5 ${stat.color}`} />
+            <Card key={stat.label} className="bg-slate-800/50 border-slate-700/60 overflow-hidden">
+              <CardContent className="p-3 sm:p-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-slate-700/60 flex items-center justify-center shrink-0">
+                    <stat.icon className={`w-4 h-4 sm:w-5 sm:h-5 ${stat.color}`} />
                   </div>
-                  <div>
-                    <p className="text-2xl font-bold text-white">{stat.value}</p>
-                    <p className="text-slate-400 text-xs">{stat.label}</p>
+                  <div className="min-w-0 overflow-hidden">
+                    <p className="text-xl sm:text-2xl font-bold text-white leading-none">{stat.value}</p>
+                    <p className="text-slate-400 text-[10px] sm:text-xs mt-0.5 truncate">{stat.label}</p>
                   </div>
                 </div>
               </CardContent>
@@ -338,193 +393,167 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* ── AI Career Roadmap Section ── */}
-        {(() => {
-          let savedRoadmap: { recommended_courses?: string[]; career_paths?: string[]; expected_income?: string; learning_order?: string } | null = null;
-          if (skillScore?.roadmap_result) {
-            try { savedRoadmap = JSON.parse(skillScore.roadmap_result); } catch {}
-          }
-          if (savedRoadmap && savedRoadmap.recommended_courses) {
-            return (
-              <div data-testid="panel-saved-roadmap" className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Brain className="w-5 h-5 text-purple-400" />
-                    <h2 className="text-lg font-bold text-white">Your AI Career Roadmap</h2>
-                  </div>
-                  <Button
-                    data-testid="button-update-roadmap"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setLocation("/skill-test")}
-                    className="border-purple-500/40 text-purple-300 hover:bg-purple-900/30"
-                  >
-                    Update
-                  </Button>
+        {/* ══════════════════════════════════════════════════════════
+            SECTION 1 — AI SKILL TEST / CAREER ROADMAP
+        ══════════════════════════════════════════════════════════ */}
+        {savedRoadmap && savedRoadmap.recommended_courses ? (
+          <div data-testid="panel-saved-roadmap" className="space-y-4">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-purple-600/30 flex items-center justify-center">
+                  <Brain className="w-4 h-4 text-purple-300" />
                 </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {savedRoadmap.recommended_courses?.length > 0 && (
-                    <Card className="bg-slate-800/50 border-slate-700/60 overflow-hidden" data-testid="dash-card-courses">
-                      <div className="h-1 bg-gradient-to-r from-blue-600 to-purple-600" />
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-2 mb-3">
-                          <BookOpen className="w-4 h-4 text-blue-400" />
-                          <p className="text-white font-bold text-sm">Courses</p>
-                        </div>
-                        <div className="space-y-1.5">
-                          {savedRoadmap.recommended_courses!.slice(0, 4).map((c, i) => (
-                            <div key={i} className="flex items-center gap-2 text-sm">
-                              <span className="w-5 h-5 rounded-full bg-blue-600/30 text-blue-300 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
-                              <span className="text-slate-300 truncate">{c}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {savedRoadmap.career_paths?.length > 0 && (
-                    <Card className="bg-slate-800/50 border-slate-700/60" data-testid="dash-card-careers">
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-2 mb-3">
-                          <Briefcase className="w-4 h-4 text-green-400" />
-                          <p className="text-white font-bold text-sm">Career Paths</p>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {savedRoadmap.career_paths!.map((p, i) => (
-                            <Badge key={i} className="bg-green-900/30 border-green-600/30 text-green-300 text-xs px-2.5 py-1">
-                              {p}
-                            </Badge>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {savedRoadmap.expected_income && (
-                    <Card className="bg-gradient-to-r from-emerald-900/40 to-teal-900/30 border-emerald-600/30" data-testid="dash-card-income">
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <DollarSign className="w-4 h-4 text-emerald-400" />
-                          <p className="text-emerald-300 text-xs font-bold uppercase tracking-widest">Expected Income</p>
-                        </div>
-                        <p className="text-white text-lg font-extrabold">{savedRoadmap.expected_income}</p>
-                      </CardContent>
-                    </Card>
-                  )}
-
-                  {savedRoadmap.learning_order && (
-                    <Card className="bg-slate-800/50 border-slate-700/60" data-testid="dash-card-learning">
-                      <CardContent className="p-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          <ListOrdered className="w-4 h-4 text-cyan-400" />
-                          <p className="text-white font-bold text-sm">Learning Order</p>
-                        </div>
-                        <p className="text-slate-300 text-xs leading-relaxed line-clamp-4">{savedRoadmap.learning_order}</p>
-                      </CardContent>
-                    </Card>
-                  )}
-                </div>
+                <h2 className="text-lg font-bold text-white">Your AI Career Roadmap</h2>
               </div>
-            );
-          }
-          return (
-            <div
-              data-testid="banner-ai-roadmap"
-              className="relative overflow-hidden rounded-2xl border border-purple-500/40 bg-gradient-to-br from-purple-900/60 via-blue-900/50 to-slate-900/80 p-8 text-center"
-            >
-              <div className="absolute inset-0 opacity-10">
-                <div className="absolute top-0 left-1/4 w-64 h-64 bg-purple-500 rounded-full blur-3xl" />
-                <div className="absolute bottom-0 right-1/4 w-64 h-64 bg-blue-500 rounded-full blur-3xl" />
+              <Button
+                data-testid="button-update-roadmap"
+                size="sm"
+                variant="outline"
+                onClick={() => setLocation("/skill-test")}
+                className="border-purple-500/40 text-purple-300 hover:bg-purple-900/30 text-xs"
+              >
+                🔄 Update
+              </Button>
+            </div>
+
+            {/* Roadmap Cards Grid */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              {savedRoadmap.recommended_courses?.length > 0 && (
+                <Card className="bg-slate-800/50 border-slate-700/60 overflow-hidden" data-testid="dash-card-courses">
+                  <div className="h-1 bg-gradient-to-r from-blue-600 to-purple-600" />
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <BookOpen className="w-4 h-4 text-blue-400" />
+                      <p className="text-white font-bold text-sm">Recommended Courses</p>
+                    </div>
+                    <div className="space-y-2">
+                      {savedRoadmap.recommended_courses!.slice(0, 4).map((c, i) => (
+                        <div key={i} className="flex items-center gap-2 text-sm">
+                          <span className="w-5 h-5 rounded-full bg-blue-600/30 text-blue-300 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
+                          <span className="text-slate-300 truncate">{c}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {savedRoadmap.career_paths?.length > 0 && (
+                <Card className="bg-slate-800/50 border-slate-700/60" data-testid="dash-card-careers">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Briefcase className="w-4 h-4 text-green-400" />
+                      <p className="text-white font-bold text-sm">Career Paths</p>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {savedRoadmap.career_paths!.map((p, i) => (
+                        <Badge key={i} className="bg-green-900/30 border-green-600/30 text-green-300 text-xs px-2.5 py-1">
+                          {p}
+                        </Badge>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {savedRoadmap.expected_income && (
+                <Card className="bg-gradient-to-r from-emerald-900/40 to-teal-900/30 border-emerald-600/30" data-testid="dash-card-income">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <DollarSign className="w-4 h-4 text-emerald-400" />
+                      <p className="text-emerald-300 text-xs font-bold uppercase tracking-widest">Expected Income</p>
+                    </div>
+                    <p className="text-white text-base font-bold line-clamp-2 break-words">
+                      {savedRoadmap.expected_income.split("\n")[0].trim()}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {savedRoadmap.learning_order && (
+                <Card className="bg-slate-800/50 border-slate-700/60 overflow-hidden" data-testid="dash-card-learning">
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <ListOrdered className="w-4 h-4 text-cyan-400" />
+                      <p className="text-white font-bold text-sm">Learning Order</p>
+                    </div>
+                    <p className="text-slate-300 text-xs leading-relaxed line-clamp-3">
+                      {savedRoadmap.learning_order.split("\n").slice(0, 3).map(l => l.trim()).filter(Boolean).join(" → ")}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* No roadmap yet — CTA banner */
+          <div
+            data-testid="banner-ai-roadmap"
+            className="relative overflow-hidden rounded-2xl border border-purple-500/40 bg-gradient-to-br from-purple-900/60 via-blue-900/50 to-slate-900/80 p-8 text-center"
+          >
+            <div className="absolute inset-0 opacity-20 bg-gradient-to-br from-purple-900/40 to-blue-900/40 rounded-2xl" />
+            <div className="relative z-10 space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-purple-600/40 border border-purple-500/50 flex items-center justify-center mx-auto">
+                <Brain className="w-8 h-8 text-purple-300" />
               </div>
-              <div className="relative z-10 space-y-4">
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <div className="w-12 h-12 rounded-2xl bg-purple-600/40 border border-purple-500/50 flex items-center justify-center">
-                    <Brain className="w-7 h-7 text-purple-300" />
-                  </div>
-                </div>
-                <h2 className="text-2xl sm:text-3xl font-bold text-white leading-tight">
-                  AI Career Roadmap
-                </h2>
-                <p className="text-slate-300 text-base max-w-xl mx-auto">
-                  Apna background batao — AI tumhare liye personalized career roadmap banaye ga with recommended courses, career paths, aur income estimates!
-                </p>
-                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                  <Button
-                    data-testid="button-get-roadmap"
-                    size="lg"
-                    onClick={() => setLocation("/skill-test")}
-                    className="bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold text-base px-8 py-6 rounded-xl shadow-lg shadow-purple-900/40 hover:shadow-purple-800/60 transition-shadow"
-                  >
-                    <Brain className="w-5 h-5 mr-2" />
-                    Get My Roadmap
-                  </Button>
-                </div>
-                <div className="flex items-center justify-center gap-6 pt-1 text-slate-400 text-sm">
-                  <span className="flex items-center gap-1"><CheckCircle className="w-4 h-4 text-green-400" /> Sirf 2 minute</span>
-                  <span className="flex items-center gap-1"><CheckCircle className="w-4 h-4 text-green-400" /> 100% Free</span>
-                  <span className="flex items-center gap-1"><CheckCircle className="w-4 h-4 text-green-400" /> AI Powered</span>
-                </div>
+              <h2 className="text-2xl sm:text-3xl font-bold text-white">AI Skill Test & Career Roadmap</h2>
+              <p className="text-slate-300 text-base max-w-xl mx-auto">
+                Apna background batao — AI tumhare liye personalized career roadmap banaye ga with recommended courses, career paths, aur income estimates!
+              </p>
+              <Button
+                data-testid="button-get-roadmap"
+                size="lg"
+                onClick={() => setLocation("/skill-test")}
+                className="bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold text-base px-8 py-6 rounded-xl shadow-lg shadow-purple-900/40"
+              >
+                <Brain className="w-5 h-5 mr-2" />
+                Get My Roadmap
+              </Button>
+              <div className="flex items-center justify-center gap-6 pt-1 text-slate-400 text-sm">
+                <span className="flex items-center gap-1"><CheckCircle className="w-4 h-4 text-green-400" /> Sirf 2 minute</span>
+                <span className="flex items-center gap-1"><CheckCircle className="w-4 h-4 text-green-400" /> 100% Free</span>
+                <span className="flex items-center gap-1"><CheckCircle className="w-4 h-4 text-green-400" /> AI Powered</span>
               </div>
             </div>
-          );
-        })()}
+          </div>
+        )}
 
-        {/* ── FIRST CLIENT GUIDE ── */}
+        {/* ══════════════════════════════════════════════════════════
+            SECTION 2 — HOW TO GET YOUR FIRST CLIENT (DYNAMIC)
+        ══════════════════════════════════════════════════════════ */}
         <div data-testid="section-first-client-guide">
           <div className="flex items-center gap-2 mb-4">
-            <Briefcase className="w-5 h-5 text-emerald-400" />
-            <h2 className="text-xl font-bold text-white">🚀 How to Get Your First Client</h2>
+            <div className="w-8 h-8 rounded-xl bg-emerald-600/30 flex items-center justify-center">
+              <Rocket className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-white">
+                🚀 How to Get Your First Client
+              </h2>
+              {primarySkill && (
+                <p className="text-emerald-400 text-xs font-medium mt-0.5">
+                  Personalized for: {skillLabel}
+                </p>
+              )}
+            </div>
           </div>
+
           <div className="relative rounded-2xl overflow-hidden border border-emerald-700/30 bg-slate-800/50">
+            <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500" />
             <div
               data-testid="guide-content"
-              className={`p-6 space-y-5 transition-all duration-300 ${!user?.subscription_status ? "blur-[10px] select-none pointer-events-none" : ""}`}
+              className={`p-6 space-y-4 transition-all duration-300 ${!user?.subscription_status ? "blur-[10px] select-none pointer-events-none" : ""}`}
             >
-              {[
-                {
-                  step: "01",
-                  title: "Apna Portfolio Banao",
-                  body: "Ek simple portfolio website ya PDF banao jisme 2–3 sample projects hon. Real client projects na hon to fictional scenarios bhi kaam karte hain. Yeh tumhara social proof hai.",
-                  color: "from-blue-600 to-blue-700",
-                },
-                {
-                  step: "02",
-                  title: "Fiverr / Upwork Profile Setup Karo",
-                  body: "Fiverr ya Upwork par ek strong gig create karo. Apne skill ka clearly mention karo, competitive price rakho (shuru mein lower rate se clients attract karo), aur 1–2 free orders se reviews lao.",
-                  color: "from-purple-600 to-purple-700",
-                },
-                {
-                  step: "03",
-                  title: "Local Businesses Ko Approach Karo",
-                  body: "Apne sheher ke restaurants, shops, ya small businesses ko WhatsApp ya walk-in par approach karo. Unhe batao tum unki social media / website / SEO improve kar sakte ho. Ek free audit offer karo.",
-                  color: "from-emerald-600 to-emerald-700",
-                },
-                {
-                  step: "04",
-                  title: "Facebook Groups & LinkedIn Use Karo",
-                  body: "Niche-specific Facebook groups join karo. Roz ek helpful post daalo — logo ke sawaalon ke jawab do. Jab log trust karen, woh automatically DM karte hain. LinkedIn par daily post karo apni skill ke baare mein.",
-                  color: "from-orange-600 to-orange-700",
-                },
-                {
-                  step: "05",
-                  title: "Cold Outreach Script",
-                  body: 'Ek simple message: "Hi [Name], maine aapki [website/social] dekhi — maine notice kiya ke [specific issue]. Main [skill] expert hoon aur aapki [X] improve kar sakta/sakti hoon. Kya aap 10 min call ke liye available hain?" Short, specific, solution-focused rakho.',
-                  color: "from-pink-600 to-pink-700",
-                },
-                {
-                  step: "06",
-                  title: "Referrals Maango",
-                  body: "Jab pehla client mil jaye, kaam achha karo aur akhir mein poochho: 'Kya aap mujhe kisi aur ko refer kar sakte hain?' Word-of-mouth fastest growth hack hai — free bhi aur powerful bhi.",
-                  color: "from-cyan-600 to-cyan-700",
-                },
-              ].map((item) => (
-                <div key={item.step} className="flex gap-4">
-                  <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center shrink-0 text-white text-xs font-bold`}>
-                    {item.step}
+              {firstClientSteps.map((item) => (
+                <div key={item.step} className="flex gap-4 p-3 rounded-xl hover:bg-slate-700/30 transition-colors">
+                  <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center shrink-0 text-lg shadow-lg`}>
+                    {item.icon}
                   </div>
                   <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-bold text-slate-500">STEP {item.step}</span>
+                    </div>
                     <p className="text-white font-semibold text-sm mb-1">{item.title}</p>
                     <p className="text-slate-400 text-sm leading-relaxed">{item.body}</p>
                   </div>
@@ -533,17 +562,19 @@ export default function Dashboard() {
             </div>
 
             {!user?.subscription_status && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-900/40">
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-900/50 backdrop-blur-sm">
                 <div className="text-center space-y-2">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-600/30 border border-emerald-500/40 flex items-center justify-center mx-auto mb-3">
+                    <Lock className="w-6 h-6 text-emerald-400" />
+                  </div>
                   <p className="text-white font-bold text-lg">Premium Content</p>
-                  <p className="text-slate-400 text-sm">Complete client acquisition guide — unlock karo premium mein</p>
+                  <p className="text-slate-400 text-sm">Personalized client guide — unlock karo premium mein</p>
                 </div>
                 <Button
                   data-testid="button-unlock-guide"
                   onClick={() => setUpgradeOpen(true)}
                   className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold px-6 py-5 text-base shadow-lg shadow-emerald-900/40"
                 >
-                  <Lock className="w-4 h-4 mr-2" />
                   🔓 Unlock for Rs. {price} PKR
                 </Button>
               </div>
@@ -551,7 +582,20 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* ── PRICING CARDS (only for free users) ── */}
+        {/* ══════════════════════════════════════════════════════════
+            SECTION 3 — CASH GIVEAWAY + REFERRAL
+        ══════════════════════════════════════════════════════════ */}
+        <MegaLaunchBanner
+          isPremium={!!user?.subscription_status}
+          onUpgrade={() => setUpgradeOpen(true)}
+        />
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <ReferralCard />
+          <ReferralRewards />
+        </div>
+
+        {/* ── PRICING CARDS (free users only) ── */}
         {!user?.subscription_status && (
           <div data-testid="section-pricing-cards">
             <div className="flex items-center justify-between mb-4">
@@ -561,7 +605,6 @@ export default function Dashboard() {
               </h2>
             </div>
             <div className="grid sm:grid-cols-2 gap-4 max-w-2xl">
-              {/* Free Card */}
               <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5">
                 <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Free</p>
                 <p className="text-3xl font-black text-white mb-0.5">Rs. 0</p>
@@ -583,7 +626,6 @@ export default function Dashboard() {
                 <div className="text-center text-slate-500 text-xs font-medium py-2">Current Plan</div>
               </div>
 
-              {/* Premium Card */}
               <div
                 className="rounded-2xl border border-blue-500/50 bg-gradient-to-br from-blue-900/30 via-slate-800/50 to-purple-900/20 p-5 relative overflow-hidden"
                 style={{ boxShadow: "0 0 40px -10px rgba(59,130,246,0.25)" }}
@@ -618,7 +660,9 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Courses Grid */}
+        {/* ══════════════════════════════════════════════════════════
+            SECTION 4 — ALL COURSES
+        ══════════════════════════════════════════════════════════ */}
         <div>
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -626,7 +670,7 @@ export default function Dashboard() {
               All Courses
               {hasRoadmapMatches && (
                 <span className="text-xs font-normal text-purple-400 bg-purple-900/30 border border-purple-700/40 px-2 py-0.5 rounded-full ml-1">
-                  Sorted by your roadmap
+                  ⭐ Sorted by your roadmap
                 </span>
               )}
             </h2>
@@ -676,8 +720,7 @@ export default function Dashboard() {
                       key={course.id}
                       data-testid={`card-course-${course.id}`}
                       className={`
-                        relative group backdrop-blur-sm
-                        transition-all duration-300 cursor-pointer overflow-hidden
+                        relative group transition-all duration-300 cursor-pointer overflow-hidden
                         ${isRecommended
                           ? "bg-gradient-to-br from-purple-900/20 via-slate-800/60 to-slate-800/50 border-purple-500/50 hover:-translate-y-1 hover:shadow-xl hover:shadow-purple-900/30"
                           : isLocked
@@ -692,11 +735,9 @@ export default function Dashboard() {
                         else setLocation(`/course/${course.id}`);
                       }}
                     >
-                      {/* Recommended glow top bar */}
                       {isRecommended && (
                         <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-500 via-blue-400 to-purple-500" />
                       )}
-                      {/* Completed top bar */}
                       {!isRecommended && isCompleted && (
                         <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-green-500 to-emerald-400" />
                       )}
@@ -710,8 +751,7 @@ export default function Dashboard() {
                             {isRecommended && (
                               <span
                                 data-testid={`badge-recommended-${course.id}`}
-                                className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-200 bg-purple-900/40 border border-purple-500/40 px-2 py-0.5 rounded-full w-fit animate-pulse"
-                                style={{ animationDuration: "3s" }}
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-200 bg-purple-900/40 border border-purple-500/40 px-2 py-0.5 rounded-full w-fit"
                               >
                                 ⭐ Recommended
                               </span>
@@ -725,18 +765,21 @@ export default function Dashboard() {
                             <ChevronRight className={`w-4 h-4 shrink-0 transition-colors ${isRecommended ? "text-purple-400 group-hover:text-purple-300" : "text-slate-500 group-hover:text-blue-400"}`} />
                           )}
                         </div>
-                        <h3 className={`font-semibold mb-1 leading-snug transition-colors ${isRecommended ? "text-white group-hover:text-purple-100" : "text-white group-hover:text-blue-100"}`}>{course.title}</h3>
+                        <h3 className={`font-semibold mb-1 leading-snug transition-colors ${isRecommended ? "text-white group-hover:text-purple-100" : "text-white group-hover:text-blue-100"}`}>
+                          {course.title}
+                        </h3>
                         <p className="text-slate-400 text-xs mb-4 line-clamp-2">{course.description}</p>
 
                         <div className="space-y-1.5 mb-3">
                           <div className="flex justify-between text-xs text-slate-400">
                             <span>Progress</span>
-                            <span className={isCompleted ? "text-green-400 font-medium" : ""}>{isCompleted ? "Completed!" : `${prog?.lessons_completed ?? 0}/10 lessons`}</span>
+                            <span className={isCompleted ? "text-green-400 font-medium" : ""}>
+                              {isCompleted ? "Completed!" : `${prog?.lessons_completed ?? 0}/10 lessons`}
+                            </span>
                           </div>
                           <Progress value={isCompleted ? 100 : progressPct} className={`h-1.5 ${isCompleted ? "bg-slate-700 [&>div]:bg-green-500" : "bg-slate-700"}`} />
                         </div>
 
-                        {/* Certificate Button */}
                         {isCompleted && !isLocked && (
                           <Button
                             data-testid={`button-certificate-${course.id}`}
@@ -767,8 +810,8 @@ export default function Dashboard() {
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-slate-800/60 bg-slate-900/50 backdrop-blur-sm mt-16">
+      {/* ── FOOTER ── */}
+      <footer className="border-t border-slate-800/60 bg-slate-900 mt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
