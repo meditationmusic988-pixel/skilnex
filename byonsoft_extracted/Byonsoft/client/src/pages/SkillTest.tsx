@@ -22,8 +22,21 @@ function parseRoadmap(json: string | undefined | null): RoadmapResult | null {
   if (!json) return null;
   try {
     const parsed = JSON.parse(json);
-    if (parsed && Array.isArray(parsed.recommended_courses)) return parsed as RoadmapResult;
-  } catch {}
+    if (parsed && Array.isArray(parsed.recommended_courses)) {
+      const mapped = parsed.recommended_courses.map(function(c: any) {
+        if (typeof c === "string") return c;
+        if (c && c.course_name) return c.course_name;
+        if (c && c.name) return c.name;
+        return "";
+      }).filter(function(c: string) { return c.length > 0; });
+      return {
+        recommended_courses: mapped,
+        career_paths: Array.isArray(parsed.career_paths) ? parsed.career_paths : [],
+        expected_income: typeof parsed.expected_income === "string" ? parsed.expected_income : "",
+        learning_order: typeof parsed.learning_order === "string" ? parsed.learning_order : "",
+      };
+    }
+  } catch (e) {}
   return null;
 }
 
@@ -154,7 +167,7 @@ export default function SkillTest() {
               </Card>
             )}
 
-            {result.recommended_courses?.length > 0 && (
+            {result.recommended_courses && result.recommended_courses.length > 0 && (
               <Card className="bg-slate-800/50 border-slate-700/60 overflow-hidden" data-testid="card-recommended-courses">
                 <div className="h-1 bg-gradient-to-r from-blue-600 to-purple-600" />
                 <CardContent className="p-5">
@@ -164,9 +177,9 @@ export default function SkillTest() {
                   </div>
                   <div className="space-y-2.5">
                     {result.recommended_courses.map((course, i) => (
-                      <div key={i} data-testid={`recommended-course-${i}`} className="flex items-start gap-3 p-3 rounded-xl bg-slate-700/30 border border-slate-600/30">
+                      <div key={i} data-testid={"recommended-course-" + i} className="flex items-start gap-3 p-3 rounded-xl bg-slate-700/30 border border-slate-600/30">
                         <span className="w-7 h-7 rounded-full bg-blue-600/30 text-blue-300 text-sm font-bold flex items-center justify-center shrink-0">{i + 1}</span>
-                        <p className="text-white text-sm font-medium leading-snug pt-0.5">{course}</p>
+                        <p className="text-white text-sm font-medium leading-snug pt-0.5">{typeof course === "string" ? course : ""}</p>
                       </div>
                     ))}
                   </div>
@@ -174,7 +187,7 @@ export default function SkillTest() {
               </Card>
             )}
 
-            {result.career_paths?.length > 0 && (
+            {result.career_paths && result.career_paths.length > 0 && (
               <Card className="bg-slate-800/50 border-slate-700/60" data-testid="card-career-paths">
                 <CardContent className="p-5">
                   <div className="flex items-center gap-2 mb-4">
@@ -183,8 +196,8 @@ export default function SkillTest() {
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {result.career_paths.map((path, i) => (
-                      <Badge key={i} data-testid={`career-path-${i}`} className="bg-green-900/30 border-green-600/30 text-green-300 text-sm px-4 py-2">
-                        {path}
+                      <Badge key={i} data-testid={"career-path-" + i} className="bg-green-900/30 border-green-600/30 text-green-300 text-sm px-4 py-2">
+                        {typeof path === "string" ? path : ""}
                       </Badge>
                     ))}
                   </div>
@@ -211,34 +224,7 @@ export default function SkillTest() {
                     <ListOrdered className="w-5 h-5 text-cyan-400" />
                     <p className="text-white font-bold">Learning Order</p>
                   </div>
-                  <div className="space-y-3" data-testid="text-learning-order">
-                    {(() => {
-                      const sentences = result.learning_order
-                        .split(/(?<=[.!?])\s+|(?:\d+[\.\)]\s*)/)
-                        .filter(s => s.trim().length > 5);
-                      const steps = sentences.length >= 3
-                        ? [sentences.slice(0, Math.ceil(sentences.length / 3)).join(" "),
-                           sentences.slice(Math.ceil(sentences.length / 3), Math.ceil(2 * sentences.length / 3)).join(" "),
-                           sentences.slice(Math.ceil(2 * sentences.length / 3)).join(" ")]
-                        : sentences.length === 2
-                        ? [sentences[0], sentences[1], ""]
-                        : [result.learning_order, "", ""];
-                      const stepConfig = [
-                        { label: "Step 1", color: "text-blue-400", border: "border-blue-500/20 bg-blue-900/10" },
-                        { label: "Step 2", color: "text-cyan-400", border: "border-cyan-500/20 bg-cyan-900/10" },
-                        { label: "Step 3", color: "text-emerald-400", border: "border-emerald-500/20 bg-emerald-900/10" },
-                      ];
-                      return steps.filter(s => s.trim()).map((step, i) => (
-                        <div key={i} data-testid={`learning-step-${i}`} className={`flex items-start gap-3 p-3.5 rounded-xl border ${stepConfig[i].border}`}>
-                          <span className={`w-7 h-7 rounded-full bg-slate-700/60 ${stepConfig[i].color} text-xs font-bold flex items-center justify-center shrink-0 mt-0.5`}>{i + 1}</span>
-                          <div>
-                            <p className={`text-xs font-bold uppercase tracking-widest mb-1 ${stepConfig[i].color}`}>{stepConfig[i].label}</p>
-                            <p className="text-slate-300 text-sm leading-relaxed">{step.trim()}</p>
-                          </div>
-                        </div>
-                      ));
-                    })()}
-                  </div>
+                  <p className="text-slate-300 text-sm leading-relaxed" data-testid="text-learning-order">{result.learning_order}</p>
                 </CardContent>
               </Card>
             )}
@@ -259,7 +245,7 @@ export default function SkillTest() {
                     data-testid="textarea-goal"
                     className="bg-slate-700/60 border-slate-600 text-white placeholder:text-slate-500 resize-none focus:border-blue-500 min-h-[80px]"
                     rows={3}
-                    placeholder="e.g. Online earning seekhna hai, freelancing start karni hai, digital marketing mein career banana hai..."
+                    placeholder="e.g. Online earning seekhna hai, freelancing start karni hai..."
                     value={goal}
                     onChange={(e) => setGoal(e.target.value)}
                   />
@@ -271,7 +257,7 @@ export default function SkillTest() {
                     data-testid="textarea-existing-skill"
                     className="bg-slate-700/60 border-slate-600 text-white placeholder:text-slate-500 resize-none focus:border-blue-500 min-h-[80px]"
                     rows={3}
-                    placeholder="e.g. Basic Canva aata hai, social media chalana aata hai, coding seekhi hai, koi skill nahi hai..."
+                    placeholder="e.g. Basic Canva aata hai, social media chalana aata hai..."
                     value={existingSkill}
                     onChange={(e) => setExistingSkill(e.target.value)}
                   />
@@ -283,7 +269,7 @@ export default function SkillTest() {
                     data-testid="textarea-available-tool"
                     className="bg-slate-700/60 border-slate-600 text-white placeholder:text-slate-500 resize-none focus:border-blue-500 min-h-[80px]"
                     rows={3}
-                    placeholder="e.g. Sirf mobile phone hai, laptop hai, PC hai with internet, tablet hai..."
+                    placeholder="e.g. Sirf mobile phone hai, laptop hai, PC hai with internet..."
                     value={availableTool}
                     onChange={(e) => setAvailableTool(e.target.value)}
                   />
