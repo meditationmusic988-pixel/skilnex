@@ -150,7 +150,6 @@ function SkillSliderCard({ skill, onChange }: { skill: SkillRating; onChange: (i
         </span>
       </div>
 
-      {/* Slider */}
       <div className="relative px-1">
         <input
           type="range" min={0} max={4} step={1} value={skill.value}
@@ -160,7 +159,6 @@ function SkillSliderCard({ skill, onChange }: { skill: SkillRating; onChange: (i
             background: `linear-gradient(to right, ${skill.color} 0%, ${skill.color} ${pct}%, #1e293b ${pct}%, #1e293b 100%)`,
           }}
         />
-        {/* Tick marks */}
         <div className="flex justify-between mt-1.5 px-0.5">
           {SKILL_LEVELS.map((lbl, i) => (
             <div key={i} className="flex flex-col items-center gap-0.5">
@@ -182,39 +180,30 @@ export default function SkillTest() {
   const [, setRender] = useState(0);
   const tick = () => setRender(r => r + 1);
 
-  // Phase 1 state
   const [goal, setGoal] = useState("");
   const [existingSkill, setExistingSkill] = useState("");
   const [device, setDevice] = useState("");
-
-  // Phase 2 — skill sliders
   const [skills, setSkills] = useState<SkillRating[]>(INITIAL_SKILLS);
-
-  // Loading
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
   const [meterVals, setMeterVals] = useState([0, 0, 0]);
-
-  // Result
   const [result, setResult] = useState<RoadmapResult | null>(null);
 
   const { data: skillScore, isLoading: loadingSkills } = useQuery<SkillScore | null>({
     queryKey: ["/api/skills"],
   });
 
-  // Hydrate from server
   useEffect(() => {
-    if (skillScore?.roadmap_result) {
-      try {
-        const parsed = JSON.parse(skillScore.roadmap_result) as RoadmapResult;
-        if (parsed?.recommended_courses) {
-          if (skillScore.goal) setGoal(skillScore.goal);
-          if (skillScore.existing_skill) setExistingSkill(skillScore.existing_skill);
-          setResult(parsed);
-          phase.current = 4;
-          tick();
-        }
-      } catch {}
-    }
+    if (!skillScore?.roadmap_result) return;
+    try {
+      const parsed = JSON.parse(skillScore.roadmap_result) as RoadmapResult;
+      if (parsed?.recommended_courses) {
+        if (skillScore.goal) setGoal(skillScore.goal);
+        if (skillScore.existing_skill) setExistingSkill(skillScore.existing_skill);
+        setResult(parsed);
+        phase.current = 4;
+        tick();
+      }
+    } catch {}
   }, [skillScore]);
 
   const goPhase = (n: number) => { phase.current = n; tick(); };
@@ -223,19 +212,19 @@ export default function SkillTest() {
     setSkills(prev => prev.map(s => s.id === id ? { ...s, value: val } : s));
   };
 
-  // Compute overall skill score from sliders for AI prompt
   const avgSkillScore = Math.round((skills.reduce((acc, s) => acc + s.value, 0) / (skills.length * 4)) * 100);
   const ratedSkillsSummary = skills.map(s => `${s.label}: ${SKILL_LEVELS[s.value]}`).join(", ");
 
+  // ── FIX: 30 second loading timer ──
   const startLoading = () => {
     goPhase(3);
     let mi = 0;
     const msgInt = setInterval(() => {
-      mi++;
-      if (mi < LOADING_MSGS.length) setLoadingMsgIdx(mi);
-    }, 1400);
+      mi = (mi + 1) % LOADING_MSGS.length;
+      setLoadingMsgIdx(mi);
+    }, 7500); // 30s / 4 messages = 7.5s each
     setTimeout(() => setMeterVals([85, 72, 90]), 300);
-    setTimeout(() => { clearInterval(msgInt); callAI(); }, 5500);
+    setTimeout(() => { clearInterval(msgInt); callAI(); }, 30000); // ← 30 seconds
   };
 
   const callAI = async () => {
@@ -468,12 +457,10 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               <StepDot n={3} state="idle" />
             </div>
 
-            {/* Header */}
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
               <h2 className="text-base font-bold text-white mb-1">Apni Skills Rate Karo</h2>
               <p className="text-xs text-slate-500 mb-4">Har skill par slider drag karo — bilkul honest raho, AI usi ke hisaab se plan banayega.</p>
 
-              {/* Live average score */}
               <div className="flex items-center gap-3 p-3 bg-slate-800/60 rounded-xl border border-slate-700/50">
                 <div className="flex-1">
                   <p className="text-xs text-slate-500 mb-1">Overall Skill Score</p>
@@ -486,14 +473,12 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               </div>
             </div>
 
-            {/* Skill cards */}
             <div className="grid grid-cols-1 gap-3">
               {skills.map(skill => (
                 <SkillSliderCard key={skill.id} skill={skill} onChange={handleSkillChange} />
               ))}
             </div>
 
-            {/* Hint */}
             <div className="flex items-start gap-2 p-3 bg-blue-600/10 border border-blue-500/20 rounded-xl">
               <Star className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
               <p className="text-xs text-blue-300">Agar koi skill aapko pata hi nahi hai toh slider zero par chhodein — AI aapko wahan se hi start karna sikhayega.</p>
@@ -556,7 +541,6 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               </button>
             </div>
 
-            {/* Score card */}
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 flex items-center gap-5">
               <ScoreRing score={result.skill_score ?? 0} color={scoreColor(result.skill_score ?? 0)} />
               <div className="flex-1 min-w-0">
@@ -567,7 +551,6 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               </div>
             </div>
 
-            {/* Skill breakdown */}
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                 <TrendingUp className="w-3.5 h-3.5" /> Skill Breakdown
@@ -577,7 +560,6 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               <ResultBar label="Market Awareness"   value={result.confidence_scores?.market_awareness ?? 50} color="#f59e0b" />
             </div>
 
-            {/* Your rated skills summary */}
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Aapki Rated Skills</p>
               <div className="grid grid-cols-2 gap-2">
@@ -599,7 +581,6 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               </div>
             </div>
 
-            {/* Strengths + Gaps */}
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-green-500/5 border border-green-500/20 rounded-2xl p-4">
                 <p className="text-xs font-bold text-green-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
@@ -627,7 +608,6 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               </div>
             </div>
 
-            {/* Career paths + income */}
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
                 <Briefcase className="w-3.5 h-3.5" /> Career Paths
@@ -644,7 +624,6 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               </div>
             </div>
 
-            {/* Courses */}
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                 <BookOpen className="w-3.5 h-3.5" /> Recommended Courses
@@ -659,7 +638,6 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               </div>
             </div>
 
-            {/* Learning order */}
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                 <ListOrdered className="w-3.5 h-3.5" /> Learning Order
@@ -680,7 +658,6 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               </div>
             </div>
 
-            {/* CTA */}
             <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl p-5 text-center">
               <p className="text-white font-bold mb-1">Ready to start?</p>
               <p className="text-blue-200 text-xs mb-4">Apne courses explore karo aur pehla qadam uthao</p>
@@ -692,9 +669,18 @@ Respond ONLY with valid JSON (no markdown, no extra text):
           </div>
         )}
 
+        {/* Phase 4 with no result fallback */}
+        {phase.current === 4 && !result && (
+          <div className="text-center py-16 space-y-4">
+            <p className="text-slate-400">Kuch masla hua. Dobara try karo.</p>
+            <button onClick={handleRetake} className="bg-blue-600 text-white px-6 py-3 rounded-xl text-sm font-bold">
+              Retake Assessment
+            </button>
+          </div>
+        )}
+
       </main>
 
-      {/* Slider thumb styling */}
       <style>{`
         input[type=range]::-webkit-slider-thumb {
           -webkit-appearance: none;
