@@ -87,3 +87,10 @@ export function useAuth() {
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 }
+
+const logout = () => {
+  localStorage.removeItem("token");          // ya jo bhi key use ho rahi hai
+  localStorage.removeItem("byonsoft_token"); // dono clear karo
+  setUser(null);
+  window.location.href = "/";  // ← YEH LINE ADD KARO
+};
