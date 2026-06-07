@@ -17,7 +17,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import {
   Users, BookOpen, CreditCard, BarChart3, Check, X, Trash2, Edit3,
   Plus, LogOut, Shield, ChevronRight, RefreshCw, Settings, FolderOpen, Eye,
-  Download, Share2, ToggleLeft, ToggleRight, UserCheck, TrendingUp, Gift, Tag
+  Download, Share2, ToggleLeft, ToggleRight, UserCheck, TrendingUp, Gift, Tag,
+  Zap, Brain, Upload, CheckCircle2, AlertCircle
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { GiveawayManagerWidget } from "@/components/GiveawayBanner";
@@ -35,6 +36,30 @@ interface TxWithUser {
   trx_id: string; status: string; created_at: string;
   user_name: string; user_email: string; screenshot_url: string;
 }
+
+interface BulkImportState {
+  courseTitle: string;
+  driveFolderUrl: string;
+  moduleName: string;
+  generatedCategory: string;
+  generatedDescription: string;
+  generatedTags: string;
+  fetchedLessons: { title: string; video_url: string }[];
+  step: "idle" | "generating" | "fetching" | "preview" | "importing" | "done";
+  error: string;
+}
+
+const INITIAL_BULK: BulkImportState = {
+  courseTitle: "",
+  driveFolderUrl: "",
+  moduleName: "",
+  generatedCategory: "",
+  generatedDescription: "",
+  generatedTags: "",
+  fetchedLessons: [],
+  step: "idle",
+  error: "",
+};
 
 export default function AdminDashboard() {
   const [, setLocation] = useLocation();
@@ -71,6 +96,10 @@ export default function AdminDashboard() {
   const [couponCode, setCouponCode] = useState("");
   const [couponPrice, setCouponPrice] = useState("");
   const [couponDesc, setCouponDesc] = useState("");
+
+  // ── Bulk Import State ──
+  const [bulk, setBulk] = useState<BulkImportState>(INITIAL_BULK);
+  const updateBulk = (patch: Partial<BulkImportState>) => setBulk(prev => ({ ...prev, ...patch }));
 
   const { data: users = [], refetch: refetchUsers } = useQuery<User[]>({ queryKey: ["/api/admin/users"] });
   const { data: courses = [], refetch: refetchCourses } = useQuery<Course[]>({ queryKey: ["/api/admin/courses"] });
@@ -163,14 +192,16 @@ export default function AdminDashboard() {
     a.href = url; a.download = "byonsoft-referrals.csv"; a.click();
     URL.revokeObjectURL(url);
   };
+
   const { data: priceSetting } = useQuery<{ subscription_price: number }>({
     queryKey: ["/api/settings/price"],
   });
+
   useEffect(() => {
     if (referralSettings) {
       setReferralEnabled(referralSettings.referral_enabled ?? true);
       if (referralSettings.referral_reward_rules) {
-        try { setReferralRules(JSON.stringify(JSON.parse(referralSettings.referral_reward_rules), null, 2)); } catch { /* keep default */ }
+        try { setReferralRules(JSON.stringify(JSON.parse(referralSettings.referral_reward_rules), null, 2)); } catch { }
       }
     }
   }, [referralSettings]);
@@ -178,12 +209,118 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (priceSetting && !priceInput) setPriceInput(String(priceSetting.subscription_price));
   }, [priceSetting]);
+
   const { data: courseLessons = [] } = useQuery<Lesson[]>({
     queryKey: [`/api/admin/courses/${lessonCourse?.id}/lessons`],
     enabled: !!lessonCourse,
   });
 
   const pendingTx = transactions.filter((t) => t.status === "pending");
+
+  // ── Bulk Import Functions ──
+  const handleBulkGenerate = async () => {
+    if (!bulk.courseTitle.trim()) {
+      toast({ title: "Course title required", variant: "destructive" });
+      return;
+    }
+    if (!bulk.driveFolderUrl.trim()) {
+      toast({ title: "Drive folder URL required", variant: "destructive" });
+      return;
+    }
+
+    updateBulk({ step: "generating", error: "" });
+
+    try {
+      // Step 1: AI generate course details
+      const aiRes = await apiRequest("POST", "/api/ai/roadmap", {
+        goal: `Generate course metadata for: "${bulk.courseTitle}"`,
+        existing_skill: "admin creating course",
+        available_tool: "web",
+        prompt_override: `You are a course catalog AI. Generate metadata for this course title: "${bulk.courseTitle}"
+
+Respond ONLY with valid JSON (no markdown):
+{
+  "category": "one of: Web Development, Digital Marketing, AI & Automation, Freelancing & Agency, Design & Creative Skills",
+  "description": "2-3 sentence course description in simple English/Roman Urdu mix",
+  "tags": "comma-separated tags like: freelancing, canva, graphic design, youtube"
+}`,
+      });
+      const aiData = await aiRes.json();
+      let parsed: any = {};
+      try {
+        parsed = typeof aiData === "string" ? JSON.parse(aiData) : aiData;
+      } catch {
+        parsed = {
+          category: "Freelancing & Agency",
+          description: `${bulk.courseTitle} — Complete course with step by step lessons.`,
+          tags: bulk.courseTitle.toLowerCase().replace(/\s+/g, ", "),
+        };
+      }
+
+      updateBulk({
+        generatedCategory: parsed.category || "Freelancing & Agency",
+        generatedDescription: parsed.description || `${bulk.courseTitle} course.`,
+        generatedTags: parsed.tags || "",
+        step: "fetching",
+      });
+
+      // Step 2: Fetch Drive lessons
+      const driveRes = await apiRequest("GET", `/api/admin/drive/import?folderUrl=${encodeURIComponent(bulk.driveFolderUrl.trim())}`);
+      const driveData = await driveRes.json();
+      if (!driveRes.ok) throw new Error(driveData.error || "Drive fetch failed");
+
+      const lessons = (driveData.lessons as { title: string; video_url: string }[]) || [];
+
+      updateBulk({
+        fetchedLessons: lessons,
+        step: "preview",
+      });
+
+      if (lessons.length === 0) {
+        toast({ title: "No videos found in folder", variant: "destructive" });
+        updateBulk({ step: "idle" });
+      }
+    } catch (err: any) {
+      updateBulk({ step: "idle", error: err.message || "Something went wrong" });
+      toast({ title: "Failed", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const handleBulkImport = async () => {
+    if (!bulk.generatedCategory || bulk.fetchedLessons.length === 0) return;
+    updateBulk({ step: "importing" });
+
+    try {
+      // Create course
+      const courseRes = await apiRequest("POST", "/api/admin/courses", {
+        title: bulk.courseTitle.trim(),
+        category: bulk.generatedCategory,
+        description: bulk.generatedDescription,
+        tags: bulk.generatedTags,
+      });
+      const newCourse = await courseRes.json();
+
+      // Add lessons
+      const moduleName = bulk.moduleName.trim() || "Module 1";
+      for (let i = 0; i < bulk.fetchedLessons.length; i++) {
+        await apiRequest("POST", `/api/admin/courses/${newCourse.id}/lessons`, {
+          title: bulk.fetchedLessons[i].title,
+          video_url: bulk.fetchedLessons[i].video_url,
+          module_name: moduleName,
+          order_index: i,
+        });
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/courses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/courses"] });
+
+      updateBulk({ step: "done" });
+      toast({ title: `Course created with ${bulk.fetchedLessons.length} lessons!` });
+    } catch (err: any) {
+      updateBulk({ step: "preview", error: err.message });
+      toast({ title: "Import failed", description: err.message, variant: "destructive" });
+    }
+  };
 
   const updateTxStatus = useMutation({
     mutationFn: async ({ id, status }: { id: number; status: string }) => {
@@ -193,14 +330,12 @@ export default function AdminDashboard() {
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
-      toast({ title: vars.status === "approved" ? "Payment Approved!" : "Payment Rejected", description: vars.status === "approved" ? "User subscription activated" : "Transaction rejected" });
+      toast({ title: vars.status === "approved" ? "Payment Approved!" : "Payment Rejected" });
     },
   });
 
   const deleteUser = useMutation({
-    mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/admin/users/${id}`);
-    },
+    mutationFn: async (id: number) => { await apiRequest("DELETE", `/api/admin/users/${id}`); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] }); toast({ title: "User deleted" }); },
   });
 
@@ -237,8 +372,7 @@ export default function AdminDashboard() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/courses"] });
       queryClient.invalidateQueries({ queryKey: ["/api/courses"] });
-      setCourseDialog(false);
-      setEditCourse(null);
+      setCourseDialog(false); setEditCourse(null);
       setCourseForm({ title: "", category: "", description: "", tags: "" });
       toast({ title: editCourse ? "Course updated!" : "Course created!" });
     },
@@ -253,10 +387,7 @@ export default function AdminDashboard() {
         return res.json();
       } else {
         const nextIndex = courseLessons.length;
-        const res = await apiRequest("POST", `/api/admin/courses/${lessonCourse.id}/lessons`, {
-          ...normalizedForm,
-          order_index: nextIndex,
-        });
+        const res = await apiRequest("POST", `/api/admin/courses/${lessonCourse.id}/lessons`, { ...normalizedForm, order_index: nextIndex });
         return res.json();
       }
     },
@@ -281,7 +412,7 @@ export default function AdminDashboard() {
   async function fetchDriveLessons() {
     if (!driveUrl.trim()) return;
     if (!driveModuleName.trim()) {
-      toast({ title: "Module Name required", description: "Please enter a module name before fetching.", variant: "destructive" });
+      toast({ title: "Module Name required", variant: "destructive" });
       return;
     }
     setDriveFetching(true);
@@ -289,12 +420,9 @@ export default function AdminDashboard() {
       const res = await apiRequest("GET", `/api/admin/drive/import?folderUrl=${encodeURIComponent(driveUrl.trim())}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to fetch from Google Drive");
-      const drafts = (data.lessons as { title: string; video_url: string }[]).map((l) => ({
-        ...l,
-        module_name: driveModuleName.trim(),
-      }));
+      const drafts = (data.lessons as { title: string; video_url: string }[]).map((l) => ({ ...l, module_name: driveModuleName.trim() }));
       setDriveDrafts(drafts);
-      if (drafts.length === 0) toast({ title: "No files found", description: "The folder appears to be empty or not accessible." });
+      if (drafts.length === 0) toast({ title: "No files found" });
     } catch (err: any) {
       toast({ title: "Drive Fetch Failed", description: err.message, variant: "destructive" });
     } finally {
@@ -307,29 +435,26 @@ export default function AdminDashboard() {
       if (!lessonCourse || driveDrafts.length === 0) return;
       const baseIndex = courseLessons.length;
       for (let i = 0; i < driveDrafts.length; i++) {
-        await apiRequest("POST", `/api/admin/courses/${lessonCourse.id}/lessons`, {
-          ...driveDrafts[i],
-          order_index: baseIndex + i,
-        });
+        await apiRequest("POST", `/api/admin/courses/${lessonCourse.id}/lessons`, { ...driveDrafts[i], order_index: baseIndex + i });
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/courses/${lessonCourse?.id}/lessons`] });
       queryClient.invalidateQueries({ queryKey: [`/api/courses/${lessonCourse?.id}/lessons`] });
       const count = driveDrafts.length;
-      setDriveDrafts([]);
-      setDriveUrl("");
-      setDriveModuleName("");
-      toast({ title: `${count} lesson${count !== 1 ? "s" : ""} imported!`, description: "All lessons have been saved. You can now import the next module." });
+      setDriveDrafts([]); setDriveUrl(""); setDriveModuleName("");
+      toast({ title: `${count} lessons imported!` });
     },
-    onError: (err: any) => {
-      toast({ title: "Import failed", description: err.message, variant: "destructive" });
-    },
+    onError: (err: any) => toast({ title: "Import failed", description: err.message, variant: "destructive" }),
   });
 
   const deleteCourse = useMutation({
     mutationFn: async (id: number) => { await apiRequest("DELETE", `/api/admin/courses/${id}`); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/admin/courses"] }); queryClient.invalidateQueries({ queryKey: ["/api/courses"] }); toast({ title: "Course deleted" }); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/courses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/courses"] });
+      toast({ title: "Course deleted" });
+    },
   });
 
   const savePayment = useMutation({
@@ -354,17 +479,13 @@ export default function AdminDashboard() {
     onSuccess: (data: { subscription_price: number }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/settings/price"] });
       setPriceInput(String(data.subscription_price));
-      toast({ title: "Subscription price updated!", description: `New price: Rs. ${data.subscription_price}/month` });
+      toast({ title: "Price updated!", description: `New price: Rs. ${data.subscription_price}/month` });
     },
-    onError: (err: any) => {
-      toast({ title: "Failed to update price", description: err.message, variant: "destructive" });
-    },
+    onError: (err: any) => toast({ title: "Failed to update price", description: err.message, variant: "destructive" }),
   });
 
   useEffect(() => {
-    if (!user || user.role !== "admin") {
-      setLocation("/login");
-    }
+    if (!user || user.role !== "admin") setLocation("/login");
   }, [user]);
 
   if (!user || user.role !== "admin") return null;
@@ -376,8 +497,7 @@ export default function AdminDashboard() {
   };
 
   const openLessonManager = (c: Course) => {
-    setLessonCourse(c);
-    setEditLesson(null);
+    setLessonCourse(c); setEditLesson(null);
     setLessonForm({ title: "", video_url: "" });
     setLessonDialog(true);
   };
@@ -390,7 +510,6 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-[#0F172A] text-white">
-      {/* Header */}
       <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-sm sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -399,14 +518,12 @@ export default function AdminDashboard() {
             </div>
             <div>
               <p className="font-bold text-white leading-none">Super Admin</p>
-              <p className="text-slate-500 text-xs">Byonsoft OS Control Panel</p>
+              <p className="text-slate-500 text-xs">Skilnex Control Panel</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             {pendingTx.length > 0 && (
-              <Badge className="bg-red-900/60 text-red-300 border-red-600/30">
-                {pendingTx.length} Pending
-              </Badge>
+              <Badge className="bg-red-900/60 text-red-300 border-red-600/30">{pendingTx.length} Pending</Badge>
             )}
             <Button size="sm" variant="ghost" onClick={logout} className="text-slate-400">
               <LogOut className="w-4 h-4" />
@@ -416,7 +533,6 @@ export default function AdminDashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-        {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
           {[
             { label: "Total Users", value: users.length, icon: Users, color: "text-blue-400" },
@@ -436,38 +552,36 @@ export default function AdminDashboard() {
           ))}
         </div>
 
-        {/* Giveaway Manager */}
-        <div className="mb-8">
-          <GiveawayManagerWidget />
-        </div>
+        <div className="mb-8"><GiveawayManagerWidget /></div>
 
         <Tabs defaultValue="transactions">
-          <TabsList className="bg-slate-800 border-slate-700 mb-6">
-            <TabsTrigger data-testid="tab-transactions" value="transactions" className="data-[state=active]:bg-slate-700 text-slate-300">
+          <TabsList className="bg-slate-800 border-slate-700 mb-6 flex-wrap h-auto gap-1">
+            <TabsTrigger value="transactions" className="data-[state=active]:bg-slate-700 text-slate-300">
               Transactions {pendingTx.length > 0 && <span className="ml-2 bg-red-600 text-white text-xs rounded-full px-1.5">{pendingTx.length}</span>}
             </TabsTrigger>
-            <TabsTrigger data-testid="tab-users" value="users" className="data-[state=active]:bg-slate-700 text-slate-300">Users</TabsTrigger>
-            <TabsTrigger data-testid="tab-courses" value="courses" className="data-[state=active]:bg-slate-700 text-slate-300">Courses</TabsTrigger>
-            <TabsTrigger data-testid="tab-payments" value="payments" className="data-[state=active]:bg-slate-700 text-slate-300">Payment Settings</TabsTrigger>
-            <TabsTrigger data-testid="tab-referrals" value="referrals" className="data-[state=active]:bg-slate-700 text-slate-300">
+            <TabsTrigger value="users" className="data-[state=active]:bg-slate-700 text-slate-300">Users</TabsTrigger>
+            <TabsTrigger value="courses" className="data-[state=active]:bg-slate-700 text-slate-300">Courses</TabsTrigger>
+            <TabsTrigger value="bulk-import" className="data-[state=active]:bg-slate-700 text-slate-300">
+              <Zap className="w-4 h-4 mr-1.5 text-yellow-400" />Bulk Import
+            </TabsTrigger>
+            <TabsTrigger value="payments" className="data-[state=active]:bg-slate-700 text-slate-300">Payment Settings</TabsTrigger>
+            <TabsTrigger value="referrals" className="data-[state=active]:bg-slate-700 text-slate-300">
               <Gift className="w-4 h-4 mr-1.5" />Referrals
             </TabsTrigger>
-            <TabsTrigger data-testid="tab-settings" value="settings" className="data-[state=active]:bg-slate-700 text-slate-300">
-              <Settings className="w-4 h-4 mr-1.5" />General Settings
+            <TabsTrigger value="settings" className="data-[state=active]:bg-slate-700 text-slate-300">
+              <Settings className="w-4 h-4 mr-1.5" />Settings
             </TabsTrigger>
-            <TabsTrigger data-testid="tab-coupons" value="coupons" className="data-[state=active]:bg-slate-700 text-slate-300">
+            <TabsTrigger value="coupons" className="data-[state=active]:bg-slate-700 text-slate-300">
               <Tag className="w-4 h-4 mr-1.5" />Coupons
             </TabsTrigger>
           </TabsList>
 
-          {/* Transactions Tab */}
+          {/* ── TRANSACTIONS TAB ── */}
           <TabsContent value="transactions">
             <Card className="bg-slate-800/60 border-slate-700">
               <CardHeader className="flex flex-row items-center justify-between gap-4 pb-3">
                 <CardTitle className="text-white">Payment Transactions</CardTitle>
-                <Button size="sm" variant="ghost" onClick={() => refetchTx()} className="text-slate-400">
-                  <RefreshCw className="w-4 h-4" />
-                </Button>
+                <Button size="sm" variant="ghost" onClick={() => refetchTx()} className="text-slate-400"><RefreshCw className="w-4 h-4" /></Button>
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
@@ -495,57 +609,32 @@ export default function AdminDashboard() {
                           </TableCell>
                           <TableCell>
                             {tx.screenshot_url ? (
-                              <button
-                                onClick={() => setScreenshotTx(tx)}
-                                className="flex items-center gap-1.5 text-blue-400 hover:text-blue-300 text-xs font-medium transition-colors group"
-                                data-testid={`button-view-screenshot-${tx.id}`}
-                              >
-                                <div className="w-10 h-8 rounded border border-slate-600 overflow-hidden bg-slate-700 group-hover:border-blue-500/60 transition-colors">
+                              <button onClick={() => setScreenshotTx(tx)} className="flex items-center gap-1.5 text-blue-400 hover:text-blue-300 text-xs font-medium group">
+                                <div className="w-10 h-8 rounded border border-slate-600 overflow-hidden bg-slate-700 group-hover:border-blue-500/60">
                                   <img src={tx.screenshot_url} alt="Payment" className="w-full h-full object-cover" />
                                 </div>
                                 <Eye className="w-3 h-3" />
                               </button>
-                            ) : (
-                              <span className="text-slate-600 text-xs italic">No screenshot</span>
-                            )}
+                            ) : <span className="text-slate-600 text-xs italic">No screenshot</span>}
                           </TableCell>
                           <TableCell className="text-green-400 text-sm font-medium">Rs. {tx.amount}</TableCell>
+                          <TableCell><Badge className={`text-xs ${statusColor[tx.status]}`}>{tx.status}</Badge></TableCell>
                           <TableCell>
-                            <Badge className={`text-xs ${statusColor[tx.status]}`}>{tx.status}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-1.5 flex-wrap">
-                              {tx.status === "pending" && (
-                                <>
-                                  <Button
-                                    data-testid={`button-approve-${tx.id}`}
-                                    size="sm"
-                                    className="bg-green-700 hover:bg-green-600 text-white h-7 px-2 text-xs"
-                                    disabled={updateTxStatus.isPending}
-                                    onClick={() => updateTxStatus.mutate({ id: tx.id, status: "approved" })}
-                                  >
-                                    <Check className="w-3 h-3 mr-1" /> Approve
-                                  </Button>
-                                  <Button
-                                    data-testid={`button-reject-${tx.id}`}
-                                    size="sm"
-                                    variant="destructive"
-                                    className="h-7 px-2 text-xs"
-                                    disabled={updateTxStatus.isPending}
-                                    onClick={() => updateTxStatus.mutate({ id: tx.id, status: "rejected" })}
-                                  >
-                                    <X className="w-3 h-3 mr-1" /> Reject
-                                  </Button>
-                                </>
-                              )}
-                            </div>
+                            {tx.status === "pending" && (
+                              <div className="flex gap-1.5">
+                                <Button size="sm" className="bg-green-700 hover:bg-green-600 text-white h-7 px-2 text-xs" disabled={updateTxStatus.isPending} onClick={() => updateTxStatus.mutate({ id: tx.id, status: "approved" })}>
+                                  <Check className="w-3 h-3 mr-1" /> Approve
+                                </Button>
+                                <Button size="sm" variant="destructive" className="h-7 px-2 text-xs" disabled={updateTxStatus.isPending} onClick={() => updateTxStatus.mutate({ id: tx.id, status: "rejected" })}>
+                                  <X className="w-3 h-3 mr-1" /> Reject
+                                </Button>
+                              </div>
+                            )}
                           </TableCell>
                         </TableRow>
                       ))}
                       {transactions.length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={6} className="text-center text-slate-500 py-8">No transactions yet</TableCell>
-                        </TableRow>
+                        <TableRow><TableCell colSpan={6} className="text-center text-slate-500 py-8">No transactions yet</TableCell></TableRow>
                       )}
                     </TableBody>
                   </Table>
@@ -554,14 +643,12 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
 
-          {/* Users Tab */}
+          {/* ── USERS TAB ── */}
           <TabsContent value="users">
             <Card className="bg-slate-800/60 border-slate-700">
               <CardHeader className="flex flex-row items-center justify-between gap-4 pb-3">
                 <CardTitle className="text-white">Registered Users</CardTitle>
-                <Button size="sm" variant="ghost" onClick={() => refetchUsers()} className="text-slate-400">
-                  <RefreshCw className="w-4 h-4" />
-                </Button>
+                <Button size="sm" variant="ghost" onClick={() => refetchUsers()} className="text-slate-400"><RefreshCw className="w-4 h-4" /></Button>
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
@@ -573,7 +660,7 @@ export default function AdminDashboard() {
                         <TableHead className="text-slate-400">WhatsApp</TableHead>
                         <TableHead className="text-slate-400">Role</TableHead>
                         <TableHead className="text-slate-400">Subscription</TableHead>
-                        <TableHead className="text-slate-400">Expiry Date</TableHead>
+                        <TableHead className="text-slate-400">Expiry</TableHead>
                         <TableHead className="text-slate-400">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -584,22 +671,13 @@ export default function AdminDashboard() {
                           <TableCell className="text-slate-300 text-sm">{u.email}</TableCell>
                           <TableCell className="text-slate-300 text-sm">
                             {(u as any).whatsapp_number ? (
-                              <a
-                                href={`https://wa.me/${((u as any).whatsapp_number as string).replace(/\D/g, "")}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-green-400 hover:text-green-300 font-mono text-xs"
-                              >
+                              <a href={`https://wa.me/${((u as any).whatsapp_number as string).replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer" className="text-green-400 hover:text-green-300 font-mono text-xs">
                                 {(u as any).whatsapp_number}
                               </a>
-                            ) : (
-                              <span className="text-slate-600 text-xs">—</span>
-                            )}
+                            ) : <span className="text-slate-600 text-xs">—</span>}
                           </TableCell>
                           <TableCell>
-                            <Badge className={u.role === "admin" ? "bg-red-900/40 text-red-300 border-red-600/30" : "bg-slate-700 text-slate-300"}>
-                              {u.role}
-                            </Badge>
+                            <Badge className={u.role === "admin" ? "bg-red-900/40 text-red-300 border-red-600/30" : "bg-slate-700 text-slate-300"}>{u.role}</Badge>
                           </TableCell>
                           <TableCell>
                             <Badge className={u.subscription_status ? "bg-green-900/40 text-green-300 border-green-600/30" : "bg-slate-700 text-slate-400"}>
@@ -607,40 +685,16 @@ export default function AdminDashboard() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-slate-400 text-xs font-mono">
-                            {(u as any).subscription_expiry_date
-                              ? new Date((u as any).subscription_expiry_date).toLocaleDateString("en-PK", { year: "numeric", month: "short", day: "numeric" })
-                              : <span className="text-slate-700">—</span>}
+                            {(u as any).subscription_expiry_date ? new Date((u as any).subscription_expiry_date).toLocaleDateString("en-PK", { year: "numeric", month: "short", day: "numeric" }) : <span className="text-slate-700">—</span>}
                           </TableCell>
                           <TableCell>
                             {u.email !== user.email && (
                               <div className="flex gap-2 flex-wrap">
-                                <Button
-                                  data-testid={`button-toggle-sub-${u.id}`}
-                                  size="sm"
-                                  variant="ghost"
-                                  disabled={toggleSubscription.isPending}
-                                  className={`h-7 px-2 text-xs font-medium ${u.subscription_status ? "text-red-400 hover:bg-red-900/30" : "text-green-400 hover:bg-green-900/30"}`}
-                                  onClick={() => toggleSubscription.mutate({ id: u.id, status: !u.subscription_status })}
-                                >
+                                <Button size="sm" variant="ghost" disabled={toggleSubscription.isPending} className={`h-7 px-2 text-xs font-medium ${u.subscription_status ? "text-red-400 hover:bg-red-900/30" : "text-green-400 hover:bg-green-900/30"}`} onClick={() => toggleSubscription.mutate({ id: u.id, status: !u.subscription_status })}>
                                   {u.subscription_status ? "Mark Free" : "Mark Paid"}
                                 </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 px-2 text-slate-400 text-xs"
-                                  onClick={() => updateRole.mutate({ id: u.id, role: u.role === "admin" ? "user" : "admin" })}
-                                >
-                                  Toggle Admin
-                                </Button>
-                                <Button
-                                  data-testid={`button-delete-user-${u.id}`}
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 px-2 text-red-400"
-                                  onClick={() => deleteUser.mutate(u.id)}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </Button>
+                                <Button size="sm" variant="ghost" className="h-7 px-2 text-slate-400 text-xs" onClick={() => updateRole.mutate({ id: u.id, role: u.role === "admin" ? "user" : "admin" })}>Toggle Admin</Button>
+                                <Button size="sm" variant="ghost" className="h-7 px-2 text-red-400" onClick={() => deleteUser.mutate(u.id)}><Trash2 className="w-3 h-3" /></Button>
                               </div>
                             )}
                           </TableCell>
@@ -653,17 +707,12 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
 
-          {/* Courses Tab */}
+          {/* ── COURSES TAB ── */}
           <TabsContent value="courses">
             <Card className="bg-slate-800/60 border-slate-700">
               <CardHeader className="flex flex-row items-center justify-between gap-4 pb-3">
                 <CardTitle className="text-white">Manage Courses</CardTitle>
-                <Button
-                  data-testid="button-add-course"
-                  size="sm"
-                  className="bg-blue-600 text-white"
-                  onClick={() => { setEditCourse(null); setCourseForm({ title: "", category: "", description: "", tags: "" }); setCourseDialog(true); }}
-                >
+                <Button size="sm" className="bg-blue-600 text-white" onClick={() => { setEditCourse(null); setCourseForm({ title: "", category: "", description: "", tags: "" }); setCourseDialog(true); }}>
                   <Plus className="w-4 h-4 mr-1" /> Add Course
                 </Button>
               </CardHeader>
@@ -677,27 +726,11 @@ export default function AdminDashboard() {
                           <p className="text-slate-400 text-xs">{c.category}</p>
                         </div>
                         <div className="flex gap-2 shrink-0">
-                          <Button
-                            data-testid={`button-lessons-${c.id}`}
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 px-2 text-purple-400 text-xs font-medium"
-                            onClick={() => openLessonManager(c)}
-                          >
+                          <Button size="sm" variant="ghost" className="h-7 px-2 text-purple-400 text-xs" onClick={() => openLessonManager(c)}>
                             <BookOpen className="w-3 h-3 mr-1" /> Lessons
                           </Button>
-                          <Button size="sm" variant="ghost" className="h-7 px-2 text-blue-400" onClick={() => openCourseEdit(c)}>
-                            <Edit3 className="w-3 h-3" />
-                          </Button>
-                          <Button
-                            data-testid={`button-delete-course-${c.id}`}
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 px-2 text-red-400"
-                            onClick={() => deleteCourse.mutate(c.id)}
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </Button>
+                          <Button size="sm" variant="ghost" className="h-7 px-2 text-blue-400" onClick={() => openCourseEdit(c)}><Edit3 className="w-3 h-3" /></Button>
+                          <Button size="sm" variant="ghost" className="h-7 px-2 text-red-400" onClick={() => deleteCourse.mutate(c.id)}><Trash2 className="w-3 h-3" /></Button>
                         </div>
                       </div>
                     </div>
@@ -707,12 +740,208 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
 
-          {/* Payment Settings Tab */}
+          {/* ── BULK IMPORT TAB ── */}
+          <TabsContent value="bulk-import">
+            <div className="space-y-6">
+              {/* Header card */}
+              <Card className="bg-gradient-to-br from-yellow-900/30 via-slate-800/60 to-slate-800/60 border-yellow-500/30">
+                <CardContent className="p-6">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-yellow-500/20 flex items-center justify-center shrink-0">
+                      <Zap className="w-6 h-6 text-yellow-400" />
+                    </div>
+                    <div>
+                      <h2 className="text-white font-bold text-lg mb-1">AI Bulk Course Import</h2>
+                      <p className="text-slate-400 text-sm">Course title likho + Drive folder link do → AI sab kuch automatically generate karega!</p>
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {["AI Category Generate", "AI Description", "AI Tags", "Auto Lessons", "Ek Click Save"].map(f => (
+                          <span key={f} className="text-xs bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 px-2 py-1 rounded-full">{f}</span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Step 1: Input */}
+              {(bulk.step === "idle" || bulk.step === "generating" || bulk.step === "fetching") && (
+                <Card className="bg-slate-800/60 border-slate-700">
+                  <CardHeader>
+                    <CardTitle className="text-white text-base flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold">1</span>
+                      Course Details
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <Label className="text-slate-300 mb-2 block">Course Title <span className="text-red-400">*</span></Label>
+                      <Input
+                        className="bg-slate-700 border-slate-600 text-white"
+                        placeholder="e.g. Complete Freelancing Masterclass"
+                        value={bulk.courseTitle}
+                        onChange={e => updateBulk({ courseTitle: e.target.value })}
+                        disabled={bulk.step !== "idle"}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-slate-300 mb-2 block">Google Drive Folder URL <span className="text-red-400">*</span></Label>
+                      <Input
+                        className="bg-slate-700 border-slate-600 text-white"
+                        placeholder="https://drive.google.com/drive/folders/..."
+                        value={bulk.driveFolderUrl}
+                        onChange={e => updateBulk({ driveFolderUrl: e.target.value })}
+                        disabled={bulk.step !== "idle"}
+                      />
+                      <p className="text-slate-500 text-xs mt-1">Folder public honi chahiye — Share → Anyone with link → Viewer</p>
+                    </div>
+                    <div>
+                      <Label className="text-slate-300 mb-2 block">Module Name</Label>
+                      <Input
+                        className="bg-slate-700 border-slate-600 text-white"
+                        placeholder="e.g. Section 1: Introduction"
+                        value={bulk.moduleName}
+                        onChange={e => updateBulk({ moduleName: e.target.value })}
+                        disabled={bulk.step !== "idle"}
+                      />
+                    </div>
+
+                    {bulk.error && (
+                      <div className="flex items-start gap-2 p-3 bg-red-900/20 border border-red-500/30 rounded-xl">
+                        <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                        <p className="text-red-300 text-sm">{bulk.error}</p>
+                      </div>
+                    )}
+
+                    <Button
+                      className="w-full bg-gradient-to-r from-yellow-600 to-orange-500 hover:from-yellow-500 hover:to-orange-400 text-white font-bold py-3"
+                      disabled={!bulk.courseTitle.trim() || !bulk.driveFolderUrl.trim() || bulk.step !== "idle"}
+                      onClick={handleBulkGenerate}
+                    >
+                      {bulk.step === "generating" ? (
+                        <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> AI Category & Description Generate Ho Raha Hai...</>
+                      ) : bulk.step === "fetching" ? (
+                        <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Drive Se Videos Fetch Ho Rahi Hain...</>
+                      ) : (
+                        <><Brain className="w-4 h-4 mr-2" /> Generate & Import Preview</>
+                      )}
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Step 2: Preview */}
+              {bulk.step === "preview" && (
+                <div className="space-y-4">
+                  {/* AI Generated Info */}
+                  <Card className="bg-slate-800/60 border-green-500/30">
+                    <CardHeader>
+                      <CardTitle className="text-white text-base flex items-center gap-2">
+                        <CheckCircle2 className="w-5 h-5 text-green-400" />
+                        AI Generated Course Info
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div>
+                        <Label className="text-slate-400 text-xs mb-1 block">Course Title</Label>
+                        <Input className="bg-slate-700 border-slate-600 text-white" value={bulk.courseTitle} onChange={e => updateBulk({ courseTitle: e.target.value })} />
+                      </div>
+                      <div>
+                        <Label className="text-slate-400 text-xs mb-1 block">Category (AI Generated)</Label>
+                        <Input className="bg-slate-700 border-green-500/30 text-green-300" value={bulk.generatedCategory} onChange={e => updateBulk({ generatedCategory: e.target.value })} />
+                      </div>
+                      <div>
+                        <Label className="text-slate-400 text-xs mb-1 block">Description (AI Generated)</Label>
+                        <Textarea className="bg-slate-700 border-green-500/30 text-green-300 resize-none" rows={3} value={bulk.generatedDescription} onChange={e => updateBulk({ generatedDescription: e.target.value })} />
+                      </div>
+                      <div>
+                        <Label className="text-slate-400 text-xs mb-1 block">Tags (AI Generated)</Label>
+                        <Input className="bg-slate-700 border-green-500/30 text-green-300" value={bulk.generatedTags} onChange={e => updateBulk({ generatedTags: e.target.value })} />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Lessons Preview */}
+                  <Card className="bg-slate-800/60 border-slate-700">
+                    <CardHeader>
+                      <CardTitle className="text-white text-base flex items-center gap-2">
+                        <BookOpen className="w-5 h-5 text-purple-400" />
+                        {bulk.fetchedLessons.length} Lessons Found
+                        <span className="text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full ml-auto font-normal">
+                          Module: {bulk.moduleName || "Module 1"}
+                        </span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                        {bulk.fetchedLessons.map((lesson, i) => (
+                          <div key={i} className="flex items-center gap-3 p-2.5 bg-slate-700/40 border border-slate-600 rounded-lg">
+                            <span className="text-slate-500 text-xs w-5 text-right shrink-0">{i + 1}</span>
+                            <Input
+                              className="bg-transparent border-none text-white text-sm h-7 p-0 focus:ring-0 flex-1"
+                              value={lesson.title}
+                              onChange={e => updateBulk({ fetchedLessons: bulk.fetchedLessons.map((l, j) => j === i ? { ...l, title: e.target.value } : l) })}
+                            />
+                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-400 shrink-0" onClick={() => updateBulk({ fetchedLessons: bulk.fetchedLessons.filter((_, j) => j !== i) })}>
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <div className="flex gap-3">
+                    <Button variant="ghost" className="text-slate-400 border border-slate-700" onClick={() => updateBulk({ step: "idle", fetchedLessons: [], error: "" })}>
+                      ← Back
+                    </Button>
+                    <Button
+                      className="flex-1 bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 text-white font-bold py-3"
+                      onClick={handleBulkImport}
+                      disabled={bulk.fetchedLessons.length === 0}
+                    >
+                      <Upload className="w-4 h-4 mr-2" />
+                      Sab Save Karo — Course + {bulk.fetchedLessons.length} Lessons
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 3: Importing */}
+              {bulk.step === "importing" && (
+                <Card className="bg-slate-800/60 border-slate-700">
+                  <CardContent className="py-12 text-center space-y-4">
+                    <div className="w-16 h-16 rounded-full border-4 border-blue-900/50 border-t-blue-500 animate-spin mx-auto" />
+                    <p className="text-white font-bold">Course aur Lessons save ho rahe hain...</p>
+                    <p className="text-slate-400 text-sm">Thora wait karo — {bulk.fetchedLessons.length} lessons upload ho rahi hain</p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Step 4: Done */}
+              {bulk.step === "done" && (
+                <Card className="bg-gradient-to-br from-green-900/30 to-slate-800/60 border-green-500/30">
+                  <CardContent className="py-12 text-center space-y-4">
+                    <CheckCircle2 className="w-16 h-16 text-green-400 mx-auto" />
+                    <h3 className="text-white font-bold text-xl">Course Successfully Import Ho Gaya! 🎉</h3>
+                    <p className="text-slate-400">"{bulk.courseTitle}" — {bulk.fetchedLessons.length} lessons ke saath</p>
+                    <div className="flex gap-3 justify-center mt-4">
+                      <Button className="bg-blue-600 text-white" onClick={() => setBulk(INITIAL_BULK)}>
+                        <Plus className="w-4 h-4 mr-2" /> Naya Course Import Karo
+                      </Button>
+                      <Button variant="ghost" className="text-slate-400 border border-slate-700" onClick={() => { setBulk(INITIAL_BULK); refetchCourses(); }}>
+                        Courses Dekho
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* ── PAYMENT SETTINGS TAB ── */}
           <TabsContent value="payments">
             <Card className="bg-slate-800/60 border-slate-700">
-              <CardHeader>
-                <CardTitle className="text-white">Payment Receiving Details</CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle className="text-white">Payment Receiving Details</CardTitle></CardHeader>
               <CardContent>
                 <div className="space-y-4">
                   {paymentSettings.map((p) => (
@@ -720,16 +949,9 @@ export default function AdminDashboard() {
                       {editPayment?.id === p.id ? (
                         <div className="space-y-3">
                           <p className="text-white font-medium">{p.method_name}</p>
-                          <Textarea
-                            value={paymentDetails}
-                            onChange={(e) => setPaymentDetails(e.target.value)}
-                            className="bg-slate-600/60 border-slate-500 text-white text-sm resize-none"
-                            rows={3}
-                          />
+                          <Textarea value={paymentDetails} onChange={(e) => setPaymentDetails(e.target.value)} className="bg-slate-600/60 border-slate-500 text-white text-sm resize-none" rows={3} />
                           <div className="flex gap-2">
-                            <Button size="sm" className="bg-green-600 text-white" onClick={() => savePayment.mutate()} disabled={savePayment.isPending}>
-                              {savePayment.isPending ? "Saving..." : "Save"}
-                            </Button>
+                            <Button size="sm" className="bg-green-600 text-white" onClick={() => savePayment.mutate()} disabled={savePayment.isPending}>{savePayment.isPending ? "Saving..." : "Save"}</Button>
                             <Button size="sm" variant="ghost" onClick={() => setEditPayment(null)} className="text-slate-400">Cancel</Button>
                           </div>
                         </div>
@@ -739,15 +961,7 @@ export default function AdminDashboard() {
                             <p className="text-white font-medium mb-1">{p.method_name}</p>
                             <p className="text-slate-300 text-sm font-mono">{p.account_details}</p>
                           </div>
-                          <Button
-                            data-testid={`button-edit-payment-${p.id}`}
-                            size="sm"
-                            variant="ghost"
-                            className="text-blue-400 shrink-0"
-                            onClick={() => { setEditPayment(p); setPaymentDetails(p.account_details); }}
-                          >
-                            <Edit3 className="w-4 h-4" />
-                          </Button>
+                          <Button size="sm" variant="ghost" className="text-blue-400 shrink-0" onClick={() => { setEditPayment(p); setPaymentDetails(p.account_details); }}><Edit3 className="w-4 h-4" /></Button>
                         </div>
                       )}
                     </div>
@@ -757,157 +971,88 @@ export default function AdminDashboard() {
             </Card>
           </TabsContent>
 
+          {/* ── SETTINGS TAB ── */}
           <TabsContent value="settings">
-            <div className="space-y-6">
-              <Card className="bg-slate-800/60 border-slate-700">
-                <CardHeader>
-                  <CardTitle className="text-white flex items-center gap-2">
-                    <CreditCard className="w-5 h-5 text-blue-400" />
-                    Pricing Strategy
-                  </CardTitle>
-                  <p className="text-slate-400 text-sm">Set the monthly subscription price students see across the platform.</p>
-                </CardHeader>
-                <CardContent>
-                  <div className="max-w-sm space-y-4">
-                    <div>
-                      <Label className="text-slate-300 mb-2 block">Monthly Subscription Price (Rs.)</Label>
-                      <div className="flex gap-3">
-                        <div className="relative flex-1">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium text-sm">Rs.</span>
-                          <Input
-                            data-testid="input-subscription-price"
-                            type="number"
-                            min={1}
-                            className="bg-slate-700 border-slate-600 text-white pl-10"
-                            value={priceInput}
-                            onChange={(e) => setPriceInput(e.target.value)}
-                          />
-                        </div>
-                        <Button
-                          data-testid="button-save-price"
-                          className="bg-blue-600 text-white"
-                          disabled={savePrice.isPending || !priceInput || parseInt(priceInput, 10) < 1}
-                          onClick={() => savePrice.mutate()}
-                        >
-                          {savePrice.isPending ? "Saving..." : "Save Price"}
-                        </Button>
+            <Card className="bg-slate-800/60 border-slate-700">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2"><CreditCard className="w-5 h-5 text-blue-400" />Pricing Strategy</CardTitle>
+                <p className="text-slate-400 text-sm">Monthly subscription price set karo.</p>
+              </CardHeader>
+              <CardContent>
+                <div className="max-w-sm space-y-4">
+                  <div>
+                    <Label className="text-slate-300 mb-2 block">Monthly Price (Rs.)</Label>
+                    <div className="flex gap-3">
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium text-sm">Rs.</span>
+                        <Input type="number" min={1} className="bg-slate-700 border-slate-600 text-white pl-10" value={priceInput} onChange={(e) => setPriceInput(e.target.value)} />
                       </div>
+                      <Button className="bg-blue-600 text-white" disabled={savePrice.isPending || !priceInput || parseInt(priceInput, 10) < 1} onClick={() => savePrice.mutate()}>
+                        {savePrice.isPending ? "Saving..." : "Save Price"}
+                      </Button>
                     </div>
-                    {priceSetting && (
-                      <div className="p-3 rounded-lg bg-green-900/20 border border-green-700/30">
-                        <p className="text-green-300 text-sm">
-                          Current live price: <span className="font-bold">Rs. {priceSetting.subscription_price}/month</span>
-                        </p>
-                        <p className="text-slate-400 text-xs mt-1">Students see this price on the Dashboard and Upgrade modal instantly.</p>
-                      </div>
-                    )}
                   </div>
-                </CardContent>
-              </Card>
-            </div>
+                  {priceSetting && (
+                    <div className="p-3 rounded-lg bg-green-900/20 border border-green-700/30">
+                      <p className="text-green-300 text-sm">Current price: <span className="font-bold">Rs. {priceSetting.subscription_price}/month</span></p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
-          {/* ─── Referrals Tab ──────────────────────────────────────────────────── */}
+          {/* ── REFERRALS TAB ── */}
           <TabsContent value="referrals" className="space-y-6">
-            {/* Stats row */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
-                { label: "Total Users Referred", value: referralData.reduce((a, u) => a + u.total_referrals, 0), icon: <Users className="w-5 h-5 text-blue-400" /> },
-                { label: "Successful Referrals", value: referralData.reduce((a, u) => a + u.successful_referrals, 0), icon: <UserCheck className="w-5 h-5 text-green-400" /> },
+                { label: "Total Referred", value: referralData.reduce((a, u) => a + u.total_referrals, 0), icon: <Users className="w-5 h-5 text-blue-400" /> },
+                { label: "Successful", value: referralData.reduce((a, u) => a + u.successful_referrals, 0), icon: <UserCheck className="w-5 h-5 text-green-400" /> },
                 { label: "Premium Conversions", value: referralData.reduce((a, u) => a + u.premium_conversions, 0), icon: <TrendingUp className="w-5 h-5 text-yellow-400" /> },
                 { label: "Active Referrers", value: referralData.filter(u => u.total_referrals > 0).length, icon: <Share2 className="w-5 h-5 text-purple-400" /> },
               ].map(stat => (
                 <Card key={stat.label} className="bg-slate-800 border-slate-700 p-4 flex items-center gap-3">
                   <div className="w-10 h-10 rounded-lg bg-slate-700 flex items-center justify-center shrink-0">{stat.icon}</div>
-                  <div>
-                    <div className="text-2xl font-bold text-white">{stat.value}</div>
-                    <div className="text-xs text-slate-400">{stat.label}</div>
-                  </div>
+                  <div><div className="text-2xl font-bold text-white">{stat.value}</div><div className="text-xs text-slate-400">{stat.label}</div></div>
                 </Card>
               ))}
             </div>
 
-            {/* Settings card */}
             <Card className="bg-slate-800 border-slate-700 p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-semibold text-white text-lg">Referral Program Settings</h3>
-                  <p className="text-slate-400 text-sm">Control reward tiers and whether the program is active</p>
+                  <p className="text-slate-400 text-sm">Reward tiers control karo</p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className={`text-sm font-medium ${referralEnabled ? "text-green-400" : "text-slate-400"}`}>
-                    {referralEnabled ? "Enabled" : "Disabled"}
-                  </span>
-                  <Switch
-                    checked={referralEnabled}
-                    onCheckedChange={setReferralEnabled}
-                    data-testid="switch-referral-enabled"
-                    className="data-[state=checked]:bg-green-500"
-                  />
+                  <span className={`text-sm font-medium ${referralEnabled ? "text-green-400" : "text-slate-400"}`}>{referralEnabled ? "Enabled" : "Disabled"}</span>
+                  <Switch checked={referralEnabled} onCheckedChange={setReferralEnabled} className="data-[state=checked]:bg-green-500" />
                 </div>
               </div>
-
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-300">Reward Rules (JSON)</label>
-                <textarea
-                  value={referralRules}
-                  onChange={e => setReferralRules(e.target.value)}
-                  data-testid="input-referral-rules"
-                  rows={8}
-                  className="w-full bg-slate-900 border border-slate-600 rounded-lg text-white text-sm font-mono px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-                />
-                <p className="text-xs text-slate-500">Each rule: {`{ threshold, label, icon }`}. threshold = number of premium referrals needed.</p>
+                <textarea value={referralRules} onChange={e => setReferralRules(e.target.value)} rows={8} className="w-full bg-slate-900 border border-slate-600 rounded-lg text-white text-sm font-mono px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y" />
               </div>
-
-              <Button
-                onClick={() => saveReferralSettings.mutate()}
-                disabled={saveReferralSettings.isPending}
-                data-testid="button-save-referral-settings"
-                className="bg-blue-600 hover:bg-blue-500 text-white"
-              >
+              <Button onClick={() => saveReferralSettings.mutate()} disabled={saveReferralSettings.isPending} className="bg-blue-600 hover:bg-blue-500 text-white">
                 {saveReferralSettings.isPending ? "Saving…" : "Save Settings"}
               </Button>
             </Card>
 
-            {/* Users referral table */}
             <Card className="bg-slate-800 border-slate-700">
               <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-700">
                 <h3 className="font-semibold text-white text-lg">User Referral Stats</h3>
                 <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Search by name or email…"
-                    value={referralSearch}
-                    onChange={e => setReferralSearch(e.target.value)}
-                    data-testid="input-referral-search"
-                    className="bg-slate-700 border border-slate-600 rounded-lg text-white text-sm px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 w-56"
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={exportReferralCSV}
-                    data-testid="button-export-referrals"
-                    className="border-slate-600 text-slate-300 hover:bg-slate-700 gap-1.5"
-                  >
-                    <Download className="w-4 h-4" /> Export CSV
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => refetchReferrals()}
-                    data-testid="button-refresh-referrals"
-                    className="text-slate-400 hover:text-white"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                  </Button>
+                  <input type="text" placeholder="Search..." value={referralSearch} onChange={e => setReferralSearch(e.target.value)} className="bg-slate-700 border border-slate-600 rounded-lg text-white text-sm px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 w-56" />
+                  <Button size="sm" variant="outline" onClick={exportReferralCSV} className="border-slate-600 text-slate-300 hover:bg-slate-700 gap-1.5"><Download className="w-4 h-4" /> Export</Button>
+                  <Button size="sm" variant="ghost" onClick={() => refetchReferrals()} className="text-slate-400"><RefreshCw className="w-4 h-4" /></Button>
                 </div>
               </div>
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow className="border-slate-700 hover:bg-slate-800">
+                    <TableRow className="border-slate-700">
                       <TableHead className="text-slate-400">User</TableHead>
-                      <TableHead className="text-slate-400">Referral Code</TableHead>
+                      <TableHead className="text-slate-400">Code</TableHead>
                       <TableHead className="text-slate-400 text-center">Total</TableHead>
                       <TableHead className="text-slate-400 text-center">Successful</TableHead>
                       <TableHead className="text-slate-400 text-center">Premium</TableHead>
@@ -917,106 +1062,48 @@ export default function AdminDashboard() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {referralData
-                      .filter(u => {
-                        const q = referralSearch.toLowerCase();
-                        return !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
-                      })
-                      .sort((a, b) => b.total_referrals - a.total_referrals)
-                      .map(u => (
-                        <TableRow key={u.id} className="border-slate-700 hover:bg-slate-750">
-                          <TableCell>
-                            <div className="font-medium text-white text-sm">{u.name}</div>
-                            <div className="text-slate-400 text-xs">{u.email}</div>
-                          </TableCell>
-                          <TableCell>
-                            <code className="text-blue-300 bg-slate-700 px-2 py-0.5 rounded text-xs">{u.referral_code}</code>
-                          </TableCell>
-                          <TableCell className="text-center text-white font-semibold">{u.total_referrals}</TableCell>
-                          <TableCell className="text-center text-green-400 font-semibold">{u.successful_referrals}</TableCell>
-                          <TableCell className="text-center text-yellow-400 font-semibold">{u.premium_conversions}</TableCell>
-                          <TableCell className="text-center">
-                            <span className={`font-semibold ${u.referral_bonus_count > 0 ? "text-purple-400" : "text-slate-500"}`}>
-                              {u.referral_bonus_count}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-slate-300 text-sm">{u.referred_by_name ?? <span className="text-slate-500 italic">—</span>}</TableCell>
-                          <TableCell>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
-                                setEditBonusUser({ id: u.id, name: u.name, bonus: u.referral_bonus_count });
-                                setBonusInput(String(u.referral_bonus_count));
-                                setEditBonusDialog(true);
-                              }}
-                              data-testid={`button-edit-bonus-${u.id}`}
-                              className="text-slate-400 hover:text-white h-8 px-2"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    {referralData.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={8} className="text-center text-slate-400 py-8">No referral data yet</TableCell>
+                    {referralData.filter(u => { const q = referralSearch.toLowerCase(); return !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q); }).sort((a, b) => b.total_referrals - a.total_referrals).map(u => (
+                      <TableRow key={u.id} className="border-slate-700">
+                        <TableCell><div className="font-medium text-white text-sm">{u.name}</div><div className="text-slate-400 text-xs">{u.email}</div></TableCell>
+                        <TableCell><code className="text-blue-300 bg-slate-700 px-2 py-0.5 rounded text-xs">{u.referral_code}</code></TableCell>
+                        <TableCell className="text-center text-white font-semibold">{u.total_referrals}</TableCell>
+                        <TableCell className="text-center text-green-400 font-semibold">{u.successful_referrals}</TableCell>
+                        <TableCell className="text-center text-yellow-400 font-semibold">{u.premium_conversions}</TableCell>
+                        <TableCell className="text-center"><span className={`font-semibold ${u.referral_bonus_count > 0 ? "text-purple-400" : "text-slate-500"}`}>{u.referral_bonus_count}</span></TableCell>
+                        <TableCell className="text-slate-300 text-sm">{u.referred_by_name ?? <span className="text-slate-500 italic">—</span>}</TableCell>
+                        <TableCell>
+                          <Button size="sm" variant="ghost" onClick={() => { setEditBonusUser({ id: u.id, name: u.name, bonus: u.referral_bonus_count }); setBonusInput(String(u.referral_bonus_count)); setEditBonusDialog(true); }} className="text-slate-400 hover:text-white h-8 px-2"><Edit3 className="w-3.5 h-3.5" /></Button>
+                        </TableCell>
                       </TableRow>
-                    )}
+                    ))}
+                    {referralData.length === 0 && <TableRow><TableCell colSpan={8} className="text-center text-slate-400 py-8">No referral data yet</TableCell></TableRow>}
                   </TableBody>
                 </Table>
               </div>
             </Card>
           </TabsContent>
 
-          {/* Coupons Tab */}
+          {/* ── COUPONS TAB ── */}
           <TabsContent value="coupons" className="space-y-6">
             <Card className="bg-slate-800/60 border-slate-700">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center gap-2"><Tag className="w-5 h-5 text-blue-400" /> Create Coupon</CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle className="text-white flex items-center gap-2"><Tag className="w-5 h-5 text-blue-400" /> Create Coupon</CardTitle></CardHeader>
               <CardContent>
                 <div className="grid sm:grid-cols-3 gap-3 mb-4">
                   <div>
                     <Label className="text-slate-300 text-sm mb-1 block">Coupon Code</Label>
-                    <Input
-                      data-testid="input-coupon-code"
-                      placeholder="e.g. SAVE200"
-                      value={couponCode}
-                      onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                      className="bg-slate-700 border-slate-600 text-white font-mono uppercase"
-                    />
+                    <Input placeholder="e.g. SAVE200" value={couponCode} onChange={(e) => setCouponCode(e.target.value.toUpperCase())} className="bg-slate-700 border-slate-600 text-white font-mono uppercase" />
                   </div>
                   <div>
                     <Label className="text-slate-300 text-sm mb-1 block">Final Price (Rs.)</Label>
-                    <Input
-                      data-testid="input-coupon-price"
-                      type="number"
-                      placeholder="e.g. 500"
-                      value={couponPrice}
-                      onChange={(e) => setCouponPrice(e.target.value)}
-                      className="bg-slate-700 border-slate-600 text-white"
-                    />
+                    <Input type="number" placeholder="e.g. 500" value={couponPrice} onChange={(e) => setCouponPrice(e.target.value)} className="bg-slate-700 border-slate-600 text-white" />
                   </div>
                   <div>
-                    <Label className="text-slate-300 text-sm mb-1 block">Description (optional)</Label>
-                    <Input
-                      data-testid="input-coupon-desc"
-                      placeholder="e.g. Student discount"
-                      value={couponDesc}
-                      onChange={(e) => setCouponDesc(e.target.value)}
-                      className="bg-slate-700 border-slate-600 text-white"
-                    />
+                    <Label className="text-slate-300 text-sm mb-1 block">Description</Label>
+                    <Input placeholder="e.g. Student discount" value={couponDesc} onChange={(e) => setCouponDesc(e.target.value)} className="bg-slate-700 border-slate-600 text-white" />
                   </div>
                 </div>
-                <Button
-                  data-testid="button-create-coupon"
-                  onClick={() => createCoupon.mutate()}
-                  disabled={createCoupon.isPending || !couponCode || !couponPrice}
-                  className="bg-blue-600 hover:bg-blue-500 text-white"
-                >
-                  <Tag className="w-4 h-4 mr-2" />
-                  {createCoupon.isPending ? "Creating..." : "Create Coupon"}
+                <Button onClick={() => createCoupon.mutate()} disabled={createCoupon.isPending || !couponCode || !couponPrice} className="bg-blue-600 hover:bg-blue-500 text-white">
+                  <Tag className="w-4 h-4 mr-2" />{createCoupon.isPending ? "Creating..." : "Create Coupon"}
                 </Button>
               </CardContent>
             </Card>
@@ -1024,9 +1111,7 @@ export default function AdminDashboard() {
             <Card className="bg-slate-800/60 border-slate-700">
               <CardHeader className="flex flex-row items-center justify-between pb-3">
                 <CardTitle className="text-white">Active Coupons</CardTitle>
-                <Button size="sm" variant="ghost" onClick={() => refetchCoupons()} className="text-slate-400">
-                  <RefreshCw className="w-4 h-4" />
-                </Button>
+                <Button size="sm" variant="ghost" onClick={() => refetchCoupons()} className="text-slate-400"><RefreshCw className="w-4 h-4" /></Button>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -1045,34 +1130,17 @@ export default function AdminDashboard() {
                         <TableCell className="text-white font-mono font-bold">{c.coupon_code}</TableCell>
                         <TableCell className="text-green-400 font-semibold">Rs. {c.custom_price}</TableCell>
                         <TableCell className="text-slate-400 text-sm">{c.description || "—"}</TableCell>
-                        <TableCell className="text-slate-500 text-xs">
-                          {c.created_at ? new Date(c.created_at).toLocaleDateString("en-PK") : "—"}
-                        </TableCell>
+                        <TableCell className="text-slate-500 text-xs">{c.created_at ? new Date(c.created_at).toLocaleDateString("en-PK") : "—"}</TableCell>
                         <TableCell>
-                          <Button
-                            data-testid={`button-delete-coupon-${c.id}`}
-                            size="sm"
-                            variant="ghost"
-                            className="text-red-400 hover:bg-red-900/30 h-7 px-2"
-                            onClick={() => deleteCoupon.mutate(c.id)}
-                            disabled={deleteCoupon.isPending}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
+                          <Button size="sm" variant="ghost" className="text-red-400 hover:bg-red-900/30 h-7 px-2" onClick={() => deleteCoupon.mutate(c.id)} disabled={deleteCoupon.isPending}><Trash2 className="w-3.5 h-3.5" /></Button>
                         </TableCell>
                       </TableRow>
                     ))}
-                    {coupons.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center text-slate-500 py-8">
-                          No custom coupons yet. Create one above.
-                        </TableCell>
-                      </TableRow>
-                    )}
+                    {coupons.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-slate-500 py-8">No coupons yet.</TableCell></TableRow>}
                   </TableBody>
                 </Table>
                 <div className="mt-4 p-3 rounded-lg bg-slate-700/40 border border-slate-600">
-                  <p className="text-slate-400 text-xs font-medium mb-1">Default Hardcoded Coupons (always active)</p>
+                  <p className="text-slate-400 text-xs font-medium mb-1">Default Hardcoded Coupons</p>
                   <div className="flex flex-wrap gap-2">
                     {[{ code: "BYONSOFT500", price: 500 }, { code: "GCTVIP", price: 500 }, { code: "EARN500", price: 500 }].map((h) => (
                       <Badge key={h.code} className="bg-slate-600 text-slate-300 font-mono text-xs">{h.code} → Rs. {h.price}</Badge>
@@ -1085,49 +1153,27 @@ export default function AdminDashboard() {
         </Tabs>
       </main>
 
-      {/* Screenshot Viewer Dialog */}
+      {/* Screenshot Dialog */}
       <Dialog open={!!screenshotTx} onOpenChange={(o) => { if (!o) setScreenshotTx(null); }}>
         <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-2">
-              <Eye className="w-5 h-5 text-blue-400" />
-              Payment Screenshot — {screenshotTx?.user_name}
-            </DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="text-white flex items-center gap-2"><Eye className="w-5 h-5 text-blue-400" />Payment Screenshot — {screenshotTx?.user_name}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="flex flex-wrap gap-3 text-sm">
-              <div className="p-2 rounded-lg bg-slate-700/60 border border-slate-600">
-                <span className="text-slate-400 mr-2">Method:</span><span className="text-white font-medium">{screenshotTx?.method}</span>
-              </div>
-              <div className="p-2 rounded-lg bg-slate-700/60 border border-slate-600">
-                <span className="text-slate-400 mr-2">TRX ID:</span><span className="text-white font-mono">{screenshotTx?.trx_id}</span>
-              </div>
-              <div className="p-2 rounded-lg bg-slate-700/60 border border-slate-600">
-                <span className="text-slate-400 mr-2">Amount:</span><span className="text-green-400 font-bold">Rs. {screenshotTx?.amount}</span>
-              </div>
+              <div className="p-2 rounded-lg bg-slate-700/60 border border-slate-600"><span className="text-slate-400 mr-2">Method:</span><span className="text-white font-medium">{screenshotTx?.method}</span></div>
+              <div className="p-2 rounded-lg bg-slate-700/60 border border-slate-600"><span className="text-slate-400 mr-2">TRX:</span><span className="text-white font-mono">{screenshotTx?.trx_id}</span></div>
+              <div className="p-2 rounded-lg bg-slate-700/60 border border-slate-600"><span className="text-slate-400 mr-2">Amount:</span><span className="text-green-400 font-bold">Rs. {screenshotTx?.amount}</span></div>
             </div>
             {screenshotTx?.screenshot_url ? (
               <div className="rounded-xl overflow-hidden border border-slate-600 bg-slate-900">
                 <img src={screenshotTx.screenshot_url} alt="Payment Screenshot" className="w-full max-h-96 object-contain" />
               </div>
-            ) : (
-              <div className="text-center py-10 text-slate-500">No screenshot uploaded</div>
-            )}
+            ) : <div className="text-center py-10 text-slate-500">No screenshot uploaded</div>}
             {screenshotTx?.status === "pending" && (
               <div className="flex gap-3">
-                <Button
-                  className="flex-1 bg-green-700 hover:bg-green-600 text-white font-semibold"
-                  disabled={updateTxStatus.isPending}
-                  onClick={() => { updateTxStatus.mutate({ id: screenshotTx.id, status: "approved" }); setScreenshotTx(null); }}
-                >
-                  <Check className="w-4 h-4 mr-2" /> Approve Payment
+                <Button className="flex-1 bg-green-700 hover:bg-green-600 text-white" disabled={updateTxStatus.isPending} onClick={() => { updateTxStatus.mutate({ id: screenshotTx.id, status: "approved" }); setScreenshotTx(null); }}>
+                  <Check className="w-4 h-4 mr-2" /> Approve
                 </Button>
-                <Button
-                  variant="destructive"
-                  className="flex-1"
-                  disabled={updateTxStatus.isPending}
-                  onClick={() => { updateTxStatus.mutate({ id: screenshotTx.id, status: "rejected" }); setScreenshotTx(null); }}
-                >
+                <Button variant="destructive" className="flex-1" disabled={updateTxStatus.isPending} onClick={() => { updateTxStatus.mutate({ id: screenshotTx.id, status: "rejected" }); setScreenshotTx(null); }}>
                   <X className="w-4 h-4 mr-2" /> Reject
                 </Button>
               </div>
@@ -1139,60 +1185,16 @@ export default function AdminDashboard() {
       {/* Course Dialog */}
       <Dialog open={courseDialog} onOpenChange={setCourseDialog}>
         <DialogContent className="bg-slate-800 border-slate-700 text-white">
-          <DialogHeader>
-            <DialogTitle>{editCourse ? "Edit Course" : "Add New Course"}</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>{editCourse ? "Edit Course" : "Add New Course"}</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label className="text-slate-300 mb-1">Title</Label>
-              <Input
-                data-testid="input-course-title"
-                className="bg-slate-700 border-slate-600 text-white"
-                value={courseForm.title}
-                onChange={(e) => setCourseForm({ ...courseForm, title: e.target.value })}
-                placeholder="Course title"
-              />
-            </div>
-            <div>
-              <Label className="text-slate-300 mb-1">Category</Label>
-              <Input
-                data-testid="input-course-category"
-                className="bg-slate-700 border-slate-600 text-white"
-                value={courseForm.category}
-                onChange={(e) => setCourseForm({ ...courseForm, category: e.target.value })}
-                placeholder="e.g. Programming, Design, Business"
-              />
-            </div>
-            <div>
-              <Label className="text-slate-300 mb-1">Description</Label>
-              <Textarea
-                data-testid="input-course-description"
-                className="bg-slate-700 border-slate-600 text-white resize-none"
-                rows={3}
-                value={courseForm.description}
-                onChange={(e) => setCourseForm({ ...courseForm, description: e.target.value })}
-                placeholder="Describe what students will learn..."
-              />
-            </div>
-            <div>
-              <Label className="text-slate-300 mb-1">Tags <span className="text-slate-500 text-xs font-normal">(comma-separated, used for smart course matching)</span></Label>
-              <Input
-                data-testid="input-course-tags"
-                className="bg-slate-700 border-slate-600 text-white"
-                value={courseForm.tags}
-                onChange={(e) => setCourseForm({ ...courseForm, tags: e.target.value })}
-                placeholder="e.g. SEO, YouTube, Freelancing, Video Editing"
-              />
-            </div>
+            <div><Label className="text-slate-300 mb-1">Title</Label><Input className="bg-slate-700 border-slate-600 text-white" value={courseForm.title} onChange={(e) => setCourseForm({ ...courseForm, title: e.target.value })} placeholder="Course title" /></div>
+            <div><Label className="text-slate-300 mb-1">Category</Label><Input className="bg-slate-700 border-slate-600 text-white" value={courseForm.category} onChange={(e) => setCourseForm({ ...courseForm, category: e.target.value })} placeholder="e.g. Programming, Design" /></div>
+            <div><Label className="text-slate-300 mb-1">Description</Label><Textarea className="bg-slate-700 border-slate-600 text-white resize-none" rows={3} value={courseForm.description} onChange={(e) => setCourseForm({ ...courseForm, description: e.target.value })} placeholder="Describe the course..." /></div>
+            <div><Label className="text-slate-300 mb-1">Tags</Label><Input className="bg-slate-700 border-slate-600 text-white" value={courseForm.tags} onChange={(e) => setCourseForm({ ...courseForm, tags: e.target.value })} placeholder="e.g. SEO, Freelancing" /></div>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setCourseDialog(false)} className="text-slate-400">Cancel</Button>
-            <Button
-              data-testid="button-save-course"
-              className="bg-blue-600 text-white"
-              onClick={() => saveCourse.mutate()}
-              disabled={saveCourse.isPending || !courseForm.title || !courseForm.category}
-            >
+            <Button className="bg-blue-600 text-white" onClick={() => saveCourse.mutate()} disabled={saveCourse.isPending || !courseForm.title || !courseForm.category}>
               {saveCourse.isPending ? "Saving..." : editCourse ? "Update Course" : "Create Course"}
             </Button>
           </DialogFooter>
@@ -1202,203 +1204,58 @@ export default function AdminDashboard() {
       {/* Lesson Manager Dialog */}
       <Dialog open={lessonDialog} onOpenChange={(open) => { setLessonDialog(open); if (!open) { setEditLesson(null); setLessonForm({ title: "", video_url: "", module_name: "" }); setDriveUrl(""); setDriveModuleName(""); setDriveDrafts([]); } }}>
         <DialogContent className="bg-slate-800 border-slate-700 text-white max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-purple-400" />
-              Lessons — {lessonCourse?.title}
-            </DialogTitle>
-          </DialogHeader>
-
-          {/* Existing lessons list */}
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><BookOpen className="w-5 h-5 text-purple-400" />Lessons — {lessonCourse?.title}</DialogTitle></DialogHeader>
           <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-            {courseLessons.length === 0 ? (
-              <p className="text-slate-500 text-sm text-center py-4">No lessons yet. Add the first one below.</p>
-            ) : (
-              courseLessons.map((lesson, idx) => (
-                <div key={lesson.id} className={`flex items-center gap-3 p-2.5 rounded-lg border ${editLesson?.id === lesson.id ? "border-purple-500/50 bg-purple-900/20" : "border-slate-600 bg-slate-700/40"}`}>
-                  <span className="text-slate-500 text-xs w-5 text-right shrink-0">{idx + 1}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm font-medium truncate">{lesson.title}</p>
-                    {lesson.module_name ? (
-                      <p className="text-blue-400 text-xs truncate font-medium">{lesson.module_name}</p>
-                    ) : (
-                      <p className="text-slate-500 text-xs truncate italic">No module</p>
-                    )}
-                  </div>
-                  <div className="flex gap-1 shrink-0">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 w-7 p-0 text-blue-400"
-                      onClick={() => { setEditLesson(lesson); setLessonForm({ title: lesson.title, video_url: lesson.video_url, module_name: lesson.module_name || "" }); }}
-                    >
-                      <Edit3 className="w-3 h-3" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 w-7 p-0 text-red-400"
-                      disabled={deleteLesson.isPending}
-                      onClick={() => deleteLesson.mutate(lesson.id)}
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
-                  </div>
+            {courseLessons.length === 0 ? <p className="text-slate-500 text-sm text-center py-4">No lessons yet.</p> : courseLessons.map((lesson, idx) => (
+              <div key={lesson.id} className={`flex items-center gap-3 p-2.5 rounded-lg border ${editLesson?.id === lesson.id ? "border-purple-500/50 bg-purple-900/20" : "border-slate-600 bg-slate-700/40"}`}>
+                <span className="text-slate-500 text-xs w-5 text-right shrink-0">{idx + 1}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white text-sm font-medium truncate">{lesson.title}</p>
+                  {lesson.module_name ? <p className="text-blue-400 text-xs truncate">{lesson.module_name}</p> : <p className="text-slate-500 text-xs italic">No module</p>}
                 </div>
-              ))
-            )}
+                <div className="flex gap-1 shrink-0">
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-blue-400" onClick={() => { setEditLesson(lesson); setLessonForm({ title: lesson.title, video_url: lesson.video_url, module_name: lesson.module_name || "" }); }}><Edit3 className="w-3 h-3" /></Button>
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-400" disabled={deleteLesson.isPending} onClick={() => deleteLesson.mutate(lesson.id)}><Trash2 className="w-3 h-3" /></Button>
+                </div>
+              </div>
+            ))}
           </div>
-
-          {/* Add / Edit lesson form */}
           <div className="border-t border-slate-700 pt-4 space-y-3">
             <p className="text-slate-300 text-sm font-medium">{editLesson ? "Edit Lesson" : "Add New Lesson"}</p>
             <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label className="text-slate-400 text-xs mb-1">Lesson Title</Label>
-                <Input
-                  data-testid="input-lesson-title"
-                  className="bg-slate-700 border-slate-600 text-white"
-                  value={lessonForm.title}
-                  onChange={(e) => setLessonForm({ ...lessonForm, title: e.target.value })}
-                  placeholder="e.g. Introduction to Variables"
-                />
-              </div>
-              <div>
-                <Label className="text-slate-400 text-xs mb-1">Module Name</Label>
-                <Input
-                  data-testid="input-lesson-module"
-                  className="bg-slate-700 border-slate-600 text-white"
-                  value={lessonForm.module_name}
-                  onChange={(e) => setLessonForm({ ...lessonForm, module_name: e.target.value })}
-                  placeholder="e.g. Section 1: Basics"
-                />
-              </div>
+              <div><Label className="text-slate-400 text-xs mb-1">Lesson Title</Label><Input className="bg-slate-700 border-slate-600 text-white" value={lessonForm.title} onChange={(e) => setLessonForm({ ...lessonForm, title: e.target.value })} placeholder="Lesson title" /></div>
+              <div><Label className="text-slate-400 text-xs mb-1">Module Name</Label><Input className="bg-slate-700 border-slate-600 text-white" value={lessonForm.module_name} onChange={(e) => setLessonForm({ ...lessonForm, module_name: e.target.value })} placeholder="e.g. Section 1" /></div>
             </div>
             <div>
-              <Label className="text-slate-400 text-xs mb-1">Video URL (any YouTube or Google Drive format)</Label>
-              <Input
-                data-testid="input-lesson-video"
-                className="bg-slate-700 border-slate-600 text-white"
-                value={lessonForm.video_url}
-                onChange={(e) => setLessonForm({ ...lessonForm, video_url: e.target.value })}
-                placeholder="e.g. https://youtu.be/abc123 or drive.google.com/..."
-              />
-              {lessonForm.video_url && toEmbedUrl(lessonForm.video_url) !== lessonForm.video_url && (
-                <p className="text-green-400 text-xs mt-1">
-                  Will be auto-converted to embed format on save
-                </p>
-              )}
+              <Label className="text-slate-400 text-xs mb-1">Video URL</Label>
+              <Input className="bg-slate-700 border-slate-600 text-white" value={lessonForm.video_url} onChange={(e) => setLessonForm({ ...lessonForm, video_url: e.target.value })} placeholder="YouTube or Drive URL" />
             </div>
             <div className="flex gap-2">
-              {editLesson && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-slate-400"
-                  onClick={() => { setEditLesson(null); setLessonForm({ title: "", video_url: "", module_name: "" }); }}
-                >
-                  Cancel Edit
-                </Button>
-              )}
-              <Button
-                data-testid="button-save-lesson"
-                size="sm"
-                className="bg-purple-600 text-white"
-                disabled={saveLesson.isPending || !lessonForm.title || !lessonForm.video_url}
-                onClick={() => saveLesson.mutate()}
-              >
-                {saveLesson.isPending ? "Saving..." : editLesson ? "Update Lesson" : "Add Lesson"}
+              {editLesson && <Button size="sm" variant="ghost" className="text-slate-400" onClick={() => { setEditLesson(null); setLessonForm({ title: "", video_url: "", module_name: "" }); }}>Cancel</Button>}
+              <Button size="sm" className="bg-purple-600 text-white" disabled={saveLesson.isPending || !lessonForm.title || !lessonForm.video_url} onClick={() => saveLesson.mutate()}>
+                {saveLesson.isPending ? "Saving..." : editLesson ? "Update" : "Add Lesson"}
               </Button>
             </div>
           </div>
-
-          {/* ── Import Lessons from Drive ── */}
           <div className="border-t border-slate-700 pt-4 space-y-3">
-            <p className="text-slate-300 text-sm font-medium flex items-center gap-2">
-              <FolderOpen className="w-4 h-4 text-blue-400" />
-              Import Lessons from Drive
-            </p>
+            <p className="text-slate-300 text-sm font-medium flex items-center gap-2"><FolderOpen className="w-4 h-4 text-blue-400" />Import from Drive</p>
             <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label className="text-slate-400 text-xs mb-1">Module Name <span className="text-red-400">*</span></Label>
-                <Input
-                  data-testid="input-drive-module-name"
-                  className="bg-slate-700 border-slate-600 text-white text-sm"
-                  placeholder="e.g. Section 1: Basics"
-                  value={driveModuleName}
-                  onChange={(e) => setDriveModuleName(e.target.value)}
-                />
-              </div>
-              <div>
-                <Label className="text-slate-400 text-xs mb-1">Google Drive Folder URL <span className="text-red-400">*</span></Label>
-                <div className="flex gap-2">
-                  <Input
-                    data-testid="input-drive-url"
-                    className="bg-slate-700 border-slate-600 text-white text-sm"
-                    placeholder="Paste folder URL..."
-                    value={driveUrl}
-                    onChange={(e) => setDriveUrl(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && fetchDriveLessons()}
-                  />
-                  <Button
-                    data-testid="button-fetch-drive"
-                    size="sm"
-                    className="bg-blue-600 hover:bg-blue-700 text-white shrink-0"
-                    disabled={!driveUrl.trim() || !driveModuleName.trim() || driveFetching}
-                    onClick={fetchDriveLessons}
-                  >
-                    {driveFetching ? <RefreshCw className="w-4 h-4 animate-spin" /> : "Fetch"}
-                  </Button>
-                </div>
-              </div>
+              <div><Label className="text-slate-400 text-xs mb-1">Module Name *</Label><Input className="bg-slate-700 border-slate-600 text-white text-sm" placeholder="Section 1: Basics" value={driveModuleName} onChange={(e) => setDriveModuleName(e.target.value)} /></div>
+              <div><Label className="text-slate-400 text-xs mb-1">Drive Folder URL *</Label><div className="flex gap-2"><Input className="bg-slate-700 border-slate-600 text-white text-sm" placeholder="Paste folder URL..." value={driveUrl} onChange={(e) => setDriveUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && fetchDriveLessons()} /><Button size="sm" className="bg-blue-600 text-white shrink-0" disabled={!driveUrl.trim() || !driveModuleName.trim() || driveFetching} onClick={fetchDriveLessons}>{driveFetching ? <RefreshCw className="w-4 h-4 animate-spin" /> : "Fetch"}</Button></div></div>
             </div>
-
             {driveDrafts.length > 0 && (
               <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-slate-400 text-xs">{driveDrafts.length} file{driveDrafts.length !== 1 ? "s" : ""} fetched</span>
-                  <span className="text-xs bg-blue-600/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded-full font-medium">
-                    Module: {driveDrafts[0]?.module_name}
-                  </span>
-                </div>
+                <span className="text-slate-400 text-xs">{driveDrafts.length} files fetched</span>
                 <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
                   {driveDrafts.map((d, i) => (
                     <div key={i} className="flex gap-2 items-center">
-                      <Input
-                        data-testid={`input-draft-title-${i}`}
-                        className="bg-slate-700/60 border-slate-600 text-white text-xs h-8 flex-1"
-                        value={d.title}
-                        onChange={(e) => setDriveDrafts((prev) => prev.map((x, j) => j === i ? { ...x, title: e.target.value } : x))}
-                        placeholder="Lesson title"
-                      />
-                      <Input
-                        data-testid={`input-draft-url-${i}`}
-                        className="bg-slate-700/60 border-slate-600 text-slate-300 text-xs h-8 flex-1 font-mono"
-                        value={d.video_url}
-                        onChange={(e) => setDriveDrafts((prev) => prev.map((x, j) => j === i ? { ...x, video_url: e.target.value } : x))}
-                        placeholder="Video URL"
-                      />
-                      <Button
-                        data-testid={`button-remove-draft-${i}`}
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 w-8 p-0 text-red-400 hover:text-red-300 shrink-0"
-                        onClick={() => setDriveDrafts((prev) => prev.filter((_, j) => j !== i))}
-                      >
-                        <X className="w-3 h-3" />
-                      </Button>
+                      <Input className="bg-slate-700/60 border-slate-600 text-white text-xs h-8 flex-1" value={d.title} onChange={(e) => setDriveDrafts((prev) => prev.map((x, j) => j === i ? { ...x, title: e.target.value } : x))} />
+                      <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-red-400 shrink-0" onClick={() => setDriveDrafts((prev) => prev.filter((_, j) => j !== i))}><X className="w-3 h-3" /></Button>
                     </div>
                   ))}
                 </div>
-                <Button
-                  data-testid="button-upload-drive-lessons"
-                  className="w-full bg-green-600 hover:bg-green-700 text-white"
-                  disabled={bulkImportDrive.isPending || driveDrafts.length === 0}
-                  onClick={() => bulkImportDrive.mutate()}
-                >
-                  {bulkImportDrive.isPending
-                    ? "Uploading..."
-                    : `Upload All ${driveDrafts.length} Lesson${driveDrafts.length !== 1 ? "s" : ""} to "${driveDrafts[0]?.module_name}"`}
+                <Button className="w-full bg-green-600 hover:bg-green-700 text-white" disabled={bulkImportDrive.isPending || driveDrafts.length === 0} onClick={() => bulkImportDrive.mutate()}>
+                  {bulkImportDrive.isPending ? "Uploading..." : `Upload ${driveDrafts.length} Lessons`}
                 </Button>
               </div>
             )}
@@ -1406,41 +1263,19 @@ export default function AdminDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Referral Bonus Dialog */}
+      {/* Edit Bonus Dialog */}
       <Dialog open={editBonusDialog} onOpenChange={setEditBonusDialog}>
         <DialogContent className="bg-slate-800 border-slate-700 text-white">
-          <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-2">
-              <Gift className="w-5 h-5 text-purple-400" />
-              Adjust Referral Bonus — {editBonusUser?.name}
-            </DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle className="text-white flex items-center gap-2"><Gift className="w-5 h-5 text-purple-400" />Adjust Bonus — {editBonusUser?.name}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
-            <p className="text-slate-400 text-sm">
-              Manually set the referral bonus count for this user. This is used for custom reward tracking.
-            </p>
             <div className="flex items-center gap-3">
               <label className="text-sm font-medium text-slate-300 shrink-0">Bonus Count:</label>
-              <input
-                type="number"
-                min={0}
-                value={bonusInput}
-                onChange={e => setBonusInput(e.target.value)}
-                data-testid="input-bonus-count"
-                className="bg-slate-900 border border-slate-600 rounded-lg text-white text-sm px-3 py-2 w-32 focus:outline-none focus:ring-2 focus:ring-purple-500"
-              />
+              <input type="number" min={0} value={bonusInput} onChange={e => setBonusInput(e.target.value)} className="bg-slate-900 border border-slate-600 rounded-lg text-white text-sm px-3 py-2 w-32 focus:outline-none focus:ring-2 focus:ring-purple-500" />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setEditBonusDialog(false)} className="text-slate-400 hover:text-white">
-              Cancel
-            </Button>
-            <Button
-              onClick={() => adjustBonus.mutate({ userId: editBonusUser!.id, bonus: parseInt(bonusInput, 10) || 0 })}
-              disabled={adjustBonus.isPending}
-              data-testid="button-save-bonus"
-              className="bg-purple-600 hover:bg-purple-500 text-white"
-            >
+            <Button variant="ghost" onClick={() => setEditBonusDialog(false)} className="text-slate-400">Cancel</Button>
+            <Button onClick={() => adjustBonus.mutate({ userId: editBonusUser!.id, bonus: parseInt(bonusInput, 10) || 0 })} disabled={adjustBonus.isPending} className="bg-purple-600 hover:bg-purple-500 text-white">
               {adjustBonus.isPending ? "Saving…" : "Save Bonus"}
             </Button>
           </DialogFooter>
