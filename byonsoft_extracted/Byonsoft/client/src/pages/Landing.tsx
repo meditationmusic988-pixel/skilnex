@@ -6,7 +6,8 @@ import {
   BookOpen, Zap, Gift, Star, ArrowRight, ChevronRight,
   Trophy, Shield, Sparkles, TrendingUp, MessageCircle,
   Brain, Target, Users, Check, Copy, CheckCircle,
-  Play, Award, Lock, ChevronDown
+  Play, Award, Lock, ChevronDown, BadgeCheck, RotateCcw,
+  CreditCard, Headphones, Flame
 } from "lucide-react";
 
 interface GiveawayStats {
@@ -65,7 +66,7 @@ function CountdownTimer() {
         { val: time.seconds, label: "SEC" },
       ].map((t, i) => (
         <div key={i} className="flex items-center gap-2">
-          <div className="bg-red-900/40 border border-red-500/40 rounded-lg px-3 py-2 text-center min-w-[56px]">
+          <div className="bg-red-900/50 border border-red-500/50 rounded-lg px-3 py-2 text-center min-w-[56px] shadow-lg shadow-red-900/30">
             <div className="text-2xl font-black text-white tabular-nums">{String(t.val).padStart(2, "0")}</div>
             <div className="text-red-400 text-xs font-bold">{t.label}</div>
           </div>
@@ -117,15 +118,18 @@ export default function Landing() {
     <div className="min-h-screen bg-[#070D18] text-white overflow-x-hidden">
 
       {/* ─── TOP URGENCY BAR ─── */}
-      <div className="bg-gradient-to-r from-red-900/80 via-red-800/80 to-red-900/80 border-b border-red-500/30 py-2 px-4 text-center">
-        <p className="text-red-200 text-xs sm:text-sm font-bold">
-          ⚡ Sirf <span className="text-white font-black">{spotsLeft}</span> spots baqi hain 300 prize draw mein! Abhi join karo →
-          <Link href="/signup" className="ml-2 underline text-yellow-300 hover:text-yellow-200">Free Test Do</Link>
+      <div className="bg-gradient-to-r from-red-700 via-red-600 to-red-700 border-b border-red-400/40 py-2.5 px-4 text-center">
+        <p className="text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 flex-wrap">
+          <Flame className="w-4 h-4 text-yellow-300 shrink-0" />
+          🔥 <span className="text-yellow-200 font-black">{spotsLeft} spots</span> baqi hain — Prize Draw band ho raha hai!
+          <Link href="/signup" className="ml-1 bg-yellow-400 text-black font-black text-xs px-3 py-0.5 rounded-full hover:bg-yellow-300 transition-colors">
+            Abhi Join Karo →
+          </Link>
         </p>
       </div>
 
       {/* ─── NAV ─── */}
-      <nav className="sticky top-0 z-50 bg-[#070D18]/90 backdrop-blur-xl border-b border-white/5">
+      <nav className="sticky top-0 z-50 bg-[#070D18]/95 backdrop-blur-xl border-b border-white/5">
         <div className="max-w-6xl mx-auto px-4 h-14 sm:h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
@@ -145,47 +149,28 @@ export default function Landing() {
             </Link>
             <Link
               href="/signup"
-              className="inline-flex items-center gap-1 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs sm:text-sm font-bold px-3 sm:px-4 py-2 rounded-lg transition-all shadow-lg shadow-blue-900/40"
+              className="inline-flex items-center gap-1 bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 active:scale-95 text-white text-xs sm:text-sm font-black px-3 sm:px-5 py-2 rounded-lg transition-all shadow-lg shadow-green-900/40"
             >
-              Free Test Do <ArrowRight className="w-3 h-3" />
+              🚀 FREE Test Do <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
         </div>
       </nav>
 
-      {/* ─── HOOK SECTION ─── */}
-      <section className="py-10 px-4 bg-gradient-to-b from-[#0D0A00] to-[#070D18] border-b border-yellow-500/10">
-        <div className="max-w-2xl mx-auto text-center">
-          <div className="text-2xl sm:text-3xl font-black leading-snug mb-6">
-            <p className="text-slate-400 font-normal text-lg mb-1">Abba ne kaha...</p>
-            <p className="text-white">"Degree lo, job milegi" 🎓</p>
-            <p className="text-slate-400 font-normal text-lg mt-3 mb-1">Degree ne kaha...</p>
-            <p className="text-white">"Experience chahiye" 😔</p>
-            <p className="text-slate-400 font-normal text-lg mt-3 mb-1">Skilnex ne kaha —</p>
-            <p className="text-green-400 text-3xl sm:text-4xl">"Ao! 50,000/month<br />kamana sikhaun!" 🚀</p>
-          </div>
-          <Link
-            href="/signup"
-            className="inline-flex items-center gap-2 bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 active:scale-95 text-white font-black text-base px-8 py-4 rounded-2xl transition-all shadow-2xl shadow-green-900/40"
-          >
-            <Zap className="w-5 h-5" />
-            FREE mein check karo ✅
-          </Link>
-          <p className="text-slate-500 text-xs mt-3">Koi credit card nahi chahiye — bilkul free</p>
-        </div>
-      </section>
-
-      {/* ─── HERO ─── */}
-      <section className="relative pt-16 pb-20 sm:pt-24 sm:pb-28 px-4 overflow-hidden">
+      {/* ─── HERO SECTION (COMPLETELY REDESIGNED) ─── */}
+      <section className="relative pt-10 pb-16 sm:pt-14 sm:pb-24 px-4 overflow-hidden">
+        {/* Background glows */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[600px] h-[500px] rounded-full bg-blue-700/20 blur-[130px]" />
-          <div className="absolute top-40 -left-20 w-72 h-72 rounded-full bg-cyan-600/10 blur-[80px]" />
-          <div className="absolute top-20 -right-20 w-72 h-72 rounded-full bg-violet-700/10 blur-[80px]" />
+          <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[700px] h-[600px] rounded-full bg-blue-700/25 blur-[140px]" />
+          <div className="absolute top-40 -left-20 w-80 h-80 rounded-full bg-green-600/10 blur-[90px]" />
+          <div className="absolute top-20 -right-20 w-80 h-80 rounded-full bg-violet-700/12 blur-[90px]" />
         </div>
         <div className="pointer-events-none absolute inset-0 opacity-[0.025]" style={{ backgroundImage: "linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px)", backgroundSize: "50px 50px" }} />
 
         <div className="relative max-w-4xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs font-bold px-4 py-1.5 rounded-full mb-6 tracking-wider">
+
+          {/* Live badge */}
+          <div className="inline-flex items-center gap-2 bg-blue-500/10 border border-blue-500/30 text-blue-300 text-xs font-bold px-4 py-1.5 rounded-full mb-5 tracking-wider">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-400" />
@@ -193,61 +178,83 @@ export default function Landing() {
             🇵🇰 Pakistan Ki #1 AI Skill Learning Platform
           </div>
 
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold leading-[1.05] tracking-tight mb-5">
-            30 Second Mein{" "}
-            <span className="relative inline-block">
-              <span className="bg-gradient-to-r from-blue-400 via-cyan-300 to-emerald-400 bg-clip-text text-transparent">Apni Skill Discover Karo</span>
-              <svg className="absolute -bottom-2 left-0 w-full" viewBox="0 0 300 8" fill="none">
-                <path d="M2 6C50 2 150 2 298 6" stroke="url(#u)" strokeWidth="3" strokeLinecap="round"/>
-                <defs><linearGradient id="u" x1="0" y1="0" x2="300" y2="0" gradientUnits="userSpaceOnUse"><stop stopColor="#60A5FA"/><stop offset="0.5" stopColor="#67E8F9"/><stop offset="1" stopColor="#34D399"/></linearGradient></defs>
-              </svg>
-            </span>
-          </h1>
+          {/* ── THE CORE HOOK ── */}
+          <div className="mb-6">
+            {/* Hook headline */}
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-black leading-[1.08] tracking-tight mb-4">
+              <span className="text-slate-300 block text-3xl sm:text-4xl font-extrabold mb-2">Degree Hai?</span>
+              <span className="bg-gradient-to-r from-red-400 via-orange-300 to-yellow-400 bg-clip-text text-transparent block">
+                Job Nahi? 😤
+              </span>
+            </h1>
 
-          <p className="text-slate-400 text-lg sm:text-xl max-w-2xl mx-auto leading-relaxed mb-6">
-            AI tumhara <strong className="text-white">personal career advisor</strong> hai — tumhare jawab dekh ke <strong className="text-white">best courses recommend</strong> karega aur ghar baith ke <strong className="text-white">50,000+ PKR/month</strong> kamana sikhayega.
-          </p>
+            {/* Divider with arrow */}
+            <div className="flex items-center justify-center gap-3 my-5">
+              <div className="h-px w-16 bg-gradient-to-r from-transparent to-green-500/50" />
+              <span className="text-green-400 font-black text-lg">Skilnex Ka Jawab:</span>
+              <div className="h-px w-16 bg-gradient-to-l from-transparent to-green-500/50" />
+            </div>
 
-          {/* Urgency countdown */}
-          <div className="mb-8 inline-block bg-red-900/20 border border-red-500/30 rounded-2xl px-6 py-4">
-            <p className="text-red-300 text-xs font-bold uppercase tracking-widest mb-3">⏳ Early Bird Offer Khatam Hone Mein:</p>
+            {/* Big benefit */}
+            <h2 className="text-4xl sm:text-5xl md:text-7xl font-black leading-tight mb-3">
+              <span className="bg-gradient-to-r from-green-400 via-emerald-300 to-cyan-400 bg-clip-text text-transparent">
+                50K – 3 Lakh/Month
+              </span>
+            </h2>
+            <p className="text-slate-300 text-lg sm:text-xl font-semibold mb-1">
+              Ghar Baith Ke Kamao — <span className="text-white font-black">AI Mentor</span> Ke Saath 🚀
+            </p>
+            <p className="text-slate-500 text-sm sm:text-base max-w-lg mx-auto">
+              30 second ka free test do — AI tumhara <strong className="text-white">best career path</strong> discover karega aur step-by-step kamana sikhayega.
+            </p>
+          </div>
+
+          {/* ── COUNTDOWN ── */}
+          <div className="mb-7 inline-block bg-red-900/25 border border-red-500/40 rounded-2xl px-6 py-4 shadow-2xl shadow-red-900/20">
+            <p className="text-red-300 text-xs font-black uppercase tracking-widest mb-3 flex items-center justify-center gap-1.5">
+              <Flame className="w-3.5 h-3.5" /> Early Bird Offer Khatam Hone Mein:
+            </p>
             <CountdownTimer />
           </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 mb-12">
+          {/* ── MAIN CTA BUTTON ── */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 mb-8">
             <Link
               href="/signup"
-              className="group flex items-center justify-center gap-2 w-full sm:w-auto bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 active:scale-[0.97] text-white font-bold text-base sm:text-lg px-8 py-4 rounded-2xl transition-all shadow-2xl shadow-blue-900/50 hover:shadow-blue-800/60"
+              className="group relative flex items-center justify-center gap-2.5 w-full sm:w-auto bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-400 hover:to-emerald-400 active:scale-[0.97] text-white font-black text-lg sm:text-xl px-10 py-5 rounded-2xl transition-all shadow-2xl shadow-green-900/60 hover:shadow-green-800/70 overflow-hidden"
+              style={{ minWidth: "280px" }}
             >
-              <Zap className="w-5 h-5" />
-              Free Skill Test Shuru Karo
-              <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              {/* Shimmer effect */}
+              <span className="absolute inset-0 -translate-x-full animate-[shimmer_2.5s_infinite] bg-gradient-to-r from-transparent via-white/15 to-transparent skew-x-12 pointer-events-none" />
+              <Zap className="w-6 h-6 shrink-0" />
+              FREE Skill Test Shuru Karo ✅
+              <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform shrink-0" />
             </Link>
             <button
               onClick={() => scrollTo("how-it-works")}
-              className="group flex items-center justify-center gap-2 w-full sm:w-auto border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-white font-semibold text-base px-7 py-4 rounded-2xl transition-all"
+              className="group flex items-center justify-center gap-2 w-full sm:w-auto border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-white font-semibold text-base px-7 py-5 rounded-2xl transition-all"
             >
-              <Play className="w-4 h-4" />
-              Kaise Kaam Karta Hai
+              <Play className="w-4 h-4" /> Kaise Kaam Karta Hai
             </button>
           </div>
 
-          {/* Trust badges */}
-          <div className="flex flex-wrap justify-center gap-4 mb-10">
+          {/* ── TRUST BADGES (prominent row) ── */}
+          <div className="flex flex-wrap justify-center gap-2 sm:gap-3 mb-10">
             {[
-              "✅ Bilkul Free Start",
-              "🔒 Secure Platform",
-              "🤖 AI Powered",
-              "💰 750 PKR/Month",
-              "🏆 35,000 PKR Prize",
+              { icon: "🚫💳", text: "No Credit Card" },
+              { icon: "↩️", text: "Money Back Guarantee" },
+              { icon: "❌", text: "Cancel Anytime" },
+              { icon: "🤖", text: "AI Mentor 24/7" },
+              { icon: "🏆", text: "Rs. 35,000 Prize Draw" },
+              { icon: "🔒", text: "100% Secure" },
             ].map((badge) => (
-              <span key={badge} className="text-slate-400 text-xs font-medium bg-white/5 border border-white/10 px-3 py-1.5 rounded-full">
-                {badge}
+              <span key={badge.text} className="flex items-center gap-1.5 text-slate-300 text-xs font-semibold bg-white/5 border border-white/10 px-3 py-2 rounded-full hover:border-white/20 transition-colors">
+                <span>{badge.icon}</span>{badge.text}
               </span>
             ))}
           </div>
 
-          {/* Animated quiz visual */}
+          {/* ── ANIMATED AI TEST MOCKUP ── */}
           <div className="relative max-w-md mx-auto">
             <div className="absolute inset-0 rounded-2xl bg-blue-600/20 blur-xl" />
             <div className="relative rounded-2xl border border-white/10 bg-[#0D1626]/90 backdrop-blur-sm p-5 text-left shadow-2xl">
@@ -289,6 +296,38 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* ─── HOOK STORY SECTION ─── */}
+      <section className="py-12 px-4 bg-gradient-to-b from-[#0D0A00] to-[#070D18] border-y border-yellow-500/10">
+        <div className="max-w-2xl mx-auto text-center">
+          <p className="text-yellow-400 text-xs font-black uppercase tracking-widest mb-5">Kya Yeh Tumhari Story Hai?</p>
+          <div className="space-y-4 mb-8">
+            <div className="rounded-xl border border-red-500/20 bg-red-900/10 px-6 py-4">
+              <p className="text-slate-400 text-sm mb-1">Abba ne kaha...</p>
+              <p className="text-white font-black text-xl">"Degree lo, job milegi" 🎓</p>
+            </div>
+            <div className="text-slate-600 text-2xl font-black">↓</div>
+            <div className="rounded-xl border border-orange-500/20 bg-orange-900/10 px-6 py-4">
+              <p className="text-slate-400 text-sm mb-1">Degree ne kaha...</p>
+              <p className="text-white font-black text-xl">"Experience chahiye" 😔</p>
+            </div>
+            <div className="text-slate-600 text-2xl font-black">↓</div>
+            <div className="rounded-xl border border-green-500/30 bg-green-900/15 px-6 py-4 shadow-lg shadow-green-900/20">
+              <p className="text-slate-400 text-sm mb-1">Skilnex keh raha hai —</p>
+              <p className="text-green-400 font-black text-2xl sm:text-3xl">"Ao! Kamao! 50K–3 Lakh/month!" 🚀</p>
+            </div>
+          </div>
+          <Link
+            href="/signup"
+            className="group inline-flex items-center gap-2.5 bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 active:scale-95 text-white font-black text-lg px-10 py-5 rounded-2xl transition-all shadow-2xl shadow-green-900/40"
+          >
+            <Zap className="w-5 h-5" />
+            Abhi FREE Check Karo ✅
+            <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+          </Link>
+          <p className="text-slate-600 text-xs mt-3">💳 Koi credit card nahi chahiye — bilkul free shuru</p>
+        </div>
+      </section>
+
       {/* ─── PAIN POINTS ─── */}
       <section className="py-16 px-4 bg-[#0A1020]">
         <div className="max-w-4xl mx-auto">
@@ -314,7 +353,13 @@ export default function Landing() {
           </div>
           <Reveal className="text-center">
             <p className="text-2xl font-black text-white mb-2">Skilnex ka AI iska hal hai! 🎯</p>
-            <p className="text-slate-400 text-base">30 second mein tumhara best career path discover karo</p>
+            <p className="text-slate-400 text-base mb-6">30 second mein tumhara best career path discover karo</p>
+            <Link
+              href="/signup"
+              className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 active:scale-95 text-white font-black text-base px-8 py-4 rounded-2xl transition-all shadow-xl shadow-blue-900/40"
+            >
+              <Zap className="w-5 h-5" /> Mera Career Path Discover Karo →
+            </Link>
           </Reveal>
         </div>
       </section>
@@ -364,6 +409,15 @@ export default function Landing() {
               </Reveal>
             ))}
           </div>
+
+          <Reveal className="mt-10 text-center">
+            <Link
+              href="/signup"
+              className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 active:scale-95 text-white font-black text-lg px-10 py-5 rounded-2xl transition-all shadow-xl shadow-blue-900/40"
+            >
+              <Zap className="w-5 h-5" /> Abhi Apna Test Shuru Karo — FREE ✅
+            </Link>
+          </Reveal>
         </div>
       </section>
 
@@ -385,7 +439,7 @@ export default function Landing() {
               { skill: "AI Tools", earn: "60,000 - 2,50,000", icon: "🤖" },
             ].map((e, i) => (
               <Reveal key={i} delay={i * 60}>
-                <div className="rounded-xl border border-emerald-500/20 bg-emerald-900/10 p-4 text-center">
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-900/10 p-4 text-center hover:border-emerald-500/40 transition-colors">
                   <div className="text-3xl mb-2">{e.icon}</div>
                   <p className="text-white font-bold text-sm mb-1">{e.skill}</p>
                   <p className="text-emerald-400 font-black text-xs">Rs. {e.earn}</p>
@@ -395,9 +449,9 @@ export default function Landing() {
             ))}
           </div>
           <Reveal className="text-center mt-8">
-            <Link href="/signup" className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-green-500 hover:from-emerald-500 hover:to-green-400 text-white font-bold px-8 py-4 rounded-2xl transition-all shadow-xl shadow-emerald-900/30">
+            <Link href="/signup" className="inline-flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-green-500 hover:from-emerald-500 hover:to-green-400 text-white font-black text-base px-8 py-4 rounded-2xl transition-all shadow-xl shadow-emerald-900/30">
               <Zap className="w-5 h-5" />
-              Main Bhi Kamana Chahta/Chahti Hoon!
+              Main Bhi Kamana Chahta/Chahti Hoon! →
             </Link>
           </Reveal>
         </div>
@@ -580,12 +634,12 @@ export default function Landing() {
           </div>
 
           <Reveal className="mt-8 text-center">
-            <Link href="/signup" className="inline-flex items-center gap-2 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 active:scale-95 text-black font-extrabold text-base px-8 py-4 rounded-2xl transition-all shadow-2xl shadow-orange-900/30">
+            <Link href="/signup" className="inline-flex items-center gap-2 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 active:scale-95 text-black font-extrabold text-base px-8 py-5 rounded-2xl transition-all shadow-2xl shadow-orange-900/30">
               <Gift className="w-5 h-5" />
               Meri Seat Reserve Karo — Prize Draw Mein Entry!
               <ChevronRight className="w-5 h-5" />
             </Link>
-            <p className="text-slate-600 text-xs mt-3">Sirf Rs. 750/month · Cancel anytime</p>
+            <p className="text-slate-600 text-xs mt-3">Sirf Rs. 750/month · Cancel anytime · Koi risk nahi</p>
           </Reveal>
         </div>
       </section>
@@ -637,6 +691,29 @@ export default function Landing() {
               </Reveal>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ─── TRUST STRIP ─── */}
+      <section className="py-10 px-4 bg-[#0A1020] border-y border-white/5">
+        <div className="max-w-4xl mx-auto">
+          <Reveal>
+            <p className="text-center text-slate-500 text-xs uppercase font-bold tracking-widest mb-6">Guaranteed — Koi Risk Nahi</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {[
+                { icon: "🚫💳", title: "No Credit Card", desc: "Free test ke liye koi card nahi chahiye" },
+                { icon: "↩️", title: "Money Back", desc: "7-din ke andar full refund — no questions" },
+                { icon: "❌", title: "Cancel Anytime", desc: "Koi lock-in contract nahi — free ho" },
+                { icon: "🔒", title: "100% Secure", desc: "Tumhara data safe — guaranteed" },
+              ].map((t) => (
+                <div key={t.title} className="rounded-xl border border-white/5 bg-white/2 p-4 text-center">
+                  <div className="text-2xl mb-2">{t.icon}</div>
+                  <p className="text-white font-bold text-sm mb-1">{t.title}</p>
+                  <p className="text-slate-500 text-xs">{t.desc}</p>
+                </div>
+              ))}
+            </div>
+          </Reveal>
         </div>
       </section>
 
@@ -703,10 +780,10 @@ export default function Landing() {
                   </li>
                 ))}
               </ul>
-              <Link href="/signup" className="flex items-center justify-center gap-2 w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 active:scale-[0.98] text-white font-bold py-3.5 rounded-xl transition-all shadow-xl shadow-blue-900/40 text-sm">
-                <Zap className="w-4 h-4" /> Premium Lo — Prize Jeeto!
+              <Link href="/signup" className="flex items-center justify-center gap-2 w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 active:scale-[0.98] text-white font-black py-4 rounded-xl transition-all shadow-xl shadow-blue-900/40 text-base">
+                <Zap className="w-4 h-4" /> Premium Lo — Prize Jeeto! 🏆
               </Link>
-              <p className="text-center text-slate-600 text-xs mt-3">Free test pehle · Phir decide karo</p>
+              <p className="text-center text-slate-600 text-xs mt-3">↩️ Money Back · ❌ Cancel Anytime · 🚫💳 No CC Required</p>
             </div>
           </div>
         </div>
@@ -716,30 +793,35 @@ export default function Landing() {
       <section className="py-24 px-4 relative overflow-hidden">
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 via-[#070D18] to-cyan-900/10" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] rounded-full bg-blue-700/15 blur-[100px]" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] rounded-full bg-green-700/15 blur-[100px]" />
         </div>
         <Reveal className="relative max-w-xl mx-auto text-center">
           <div className="inline-flex items-center gap-2 bg-red-500/15 border border-red-500/30 text-red-300 text-xs font-bold px-4 py-1.5 rounded-full mb-6 tracking-wider">
-            ⏳ Sirf {spotsLeft} spots baqi hain!
+            <Flame className="w-3.5 h-3.5" /> Sirf {spotsLeft} spots baqi hain!
           </div>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-2">
-            Abba ne kaha degree lo...
+          <h2 className="text-3xl sm:text-5xl font-black text-white mb-2">
+            Degree Hai?
           </h2>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-400 mb-2">
-            Degree ne kaha job nahi...
+          <h2 className="text-3xl sm:text-5xl font-black text-red-400 mb-2">
+            Job Nahi? 😤
           </h2>
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-green-400 mb-6">
-            Skilnex keh raha hai — Ao! 🚀
+          <h2 className="text-3xl sm:text-5xl font-black text-green-400 mb-6">
+            Skilnex Keh Raha Hai — Ao! 🚀
           </h2>
           <p className="text-slate-400 text-base mb-8 max-w-sm mx-auto">
-            30 second mein free test do — AI tumhara career decide karega!
+            30 second mein free test do — AI tumhara career decide karega aur <strong className="text-white">50K–3 Lakh/month</strong> kamana sikhayega!
           </p>
-          <Link href="/signup" className="group flex items-center justify-center gap-2 bg-gradient-to-r from-green-600 to-emerald-500 hover:from-green-500 hover:to-emerald-400 active:scale-[0.97] text-white font-bold text-lg px-10 py-5 rounded-2xl transition-all shadow-2xl shadow-green-900/60 w-full sm:w-auto mx-auto">
-            <Zap className="w-5 h-5" />
-            FREE mein check karo ✅
-            <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+          <Link href="/signup" className="group relative flex items-center justify-center gap-2.5 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-400 hover:to-emerald-400 active:scale-[0.97] text-white font-black text-xl px-10 py-6 rounded-2xl transition-all shadow-2xl shadow-green-900/60 w-full sm:w-auto mx-auto overflow-hidden">
+            <span className="absolute inset-0 -translate-x-full animate-[shimmer_2.5s_infinite] bg-gradient-to-r from-transparent via-white/15 to-transparent skew-x-12 pointer-events-none" />
+            <Zap className="w-6 h-6 shrink-0" />
+            FREE Mein Shuru Karo ✅
+            <ChevronRight className="w-6 h-6 group-hover:translate-x-1 transition-transform shrink-0" />
           </Link>
-          <p className="text-slate-600 text-xs mt-4">Rs. 750/month · Cancel anytime · Koi risk nahi</p>
+          <div className="flex flex-wrap items-center justify-center gap-3 mt-5">
+            {["🚫💳 No Credit Card", "↩️ Money Back", "❌ Cancel Anytime"].map(b => (
+              <span key={b} className="text-slate-500 text-xs font-medium">{b}</span>
+            ))}
+          </div>
         </Reveal>
       </section>
 
