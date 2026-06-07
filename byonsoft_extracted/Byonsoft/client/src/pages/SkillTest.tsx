@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -176,6 +176,9 @@ function SkillSliderCard({ skill, onChange }: { skill: SkillRating; onChange: (i
 /* ─── Main Component ─────────────────────────────────────────── */
 export default function SkillTest() {
   const [, setLocation] = useLocation();
+  const search = useSearch();
+  const isNewTest = new URLSearchParams(search).get("new") === "1";
+
   const phase = useRef<number>(0);
   const [, setRender] = useState(0);
   const tick = () => setRender(r => r + 1);
@@ -193,6 +196,7 @@ export default function SkillTest() {
   });
 
   useEffect(() => {
+    if (isNewTest) return;
     if (!skillScore?.roadmap_result) return;
     try {
       const parsed = JSON.parse(skillScore.roadmap_result) as RoadmapResult;
@@ -204,7 +208,7 @@ export default function SkillTest() {
         tick();
       }
     } catch {}
-  }, [skillScore]);
+  }, [skillScore, isNewTest]);
 
   const goPhase = (n: number) => { phase.current = n; tick(); };
 
