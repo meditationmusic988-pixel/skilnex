@@ -12,11 +12,24 @@ import { useToast } from "@/hooks/use-toast";
 import {
   BookOpen, Lock, Zap, TrendingUp, Star, Award, ChevronRight,
   Brain, Activity, LogOut, CheckCircle, Download, User, Phone, FileText, Shield as ShieldIcon,
-  Trophy, Briefcase, DollarSign, ListOrdered, MessageCircle, X as XIcon, Target, Users, Rocket
+  Trophy, Briefcase, DollarSign, ListOrdered, MessageCircle, X as XIcon, Target, Users, Rocket,
+  MapPin, Clock, ArrowRight, Sparkles
 } from "lucide-react";
 import { MegaLaunchBanner, ReferralCard, ReferralRewards } from "@/components/GiveawayBanner";
 import { PWAInstallButton } from "@/components/PWAInstallButton";
 import type { Course, Progress as ProgressType, SkillScore } from "@shared/schema";
+
+/* ── Helper: safely convert anything to string[] ───────────── */
+function toArray(val: any): string[] {
+  if (Array.isArray(val)) return val;
+  if (val && typeof val === "object") return Object.values(val);
+  if (typeof val === "string" && val.trim()) {
+    // try splitting on newlines or arrows
+    const lines = val.split(/\n|→/).map((s: string) => s.trim()).filter(Boolean);
+    return lines.length > 1 ? lines : [val.trim()];
+  }
+  return [];
+}
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
@@ -50,9 +63,7 @@ export default function Dashboard() {
 
   const hasAssessment = !!(skillScore?.goal);
 
-  const getProgress = (courseId: number) => {
-    return progressList.find((p) => p.course_id === courseId);
-  };
+  const getProgress = (courseId: number) => progressList.find((p) => p.course_id === courseId);
 
   const roadmapSkills = useMemo(() => {
     const raw: string[] = [];
@@ -156,11 +167,7 @@ export default function Dashboard() {
   </div>
 </div></body></html>`;
     const win = window.open("", "_blank");
-    if (win) {
-      win.document.write(html);
-      win.document.close();
-      setTimeout(() => win.print(), 800);
-    }
+    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 800); }
   };
 
   const categoryColors: Record<string, string> = {
@@ -180,62 +187,67 @@ export default function Dashboard() {
 
   const firstClientSteps = [
     {
-      step: "01",
-      title: `${skillLabel} Portfolio Banao`,
+      step: "01", title: `${skillLabel} Portfolio Banao`,
       body: `${skillLabel} ke 2-3 sample projects banao — real clients na hon to fictional ya self-initiated projects bhi chalte hain. Ek clean PDF ya website pe showcase karo. Yeh tumhara pehla social proof hai.`,
-      color: "from-blue-600 to-blue-700",
-      icon: "🗂️",
+      color: "from-blue-600 to-blue-700", icon: "🗂️",
     },
     {
-      step: "02",
-      title: "Fiverr / Upwork Gig Launch Karo",
+      step: "02", title: "Fiverr / Upwork Gig Launch Karo",
       body: `${skillLabel} service ka ek strong gig banao. Apni specialty clearly likho, shuru mein competitive rate rakho, aur pehle 1-2 free ya discounted orders se 5-star reviews collect karo.`,
-      color: "from-purple-600 to-purple-700",
-      icon: "🚀",
+      color: "from-purple-600 to-purple-700", icon: "🚀",
     },
     {
-      step: "03",
-      title: "Local Businesses Ko Approach Karo",
+      step: "03", title: "Local Businesses Ko Approach Karo",
       body: `Apne sheher ke businesses ko WhatsApp ya direct message karo. Batao ke tum unki ${skillLabel} problems solve kar sakte ho. Ek free audit ya sample offer karo — rejection se mat daro.`,
-      color: "from-emerald-600 to-emerald-700",
-      icon: "🏪",
+      color: "from-emerald-600 to-emerald-700", icon: "🏪",
     },
     {
-      step: "04",
-      title: "Facebook Groups & LinkedIn Use Karo",
+      step: "04", title: "Facebook Groups & LinkedIn Use Karo",
       body: `${skillLabel} se related Facebook groups join karo. Roz ek helpful post ya answer daalo. Jab log tumhari expertise dekhein ge, woh khud DM karein ge. LinkedIn pe bhi daily activity rakho.`,
-      color: "from-orange-600 to-orange-700",
-      icon: "📱",
+      color: "from-orange-600 to-orange-700", icon: "📱",
     },
     {
-      step: "05",
-      title: "Cold Outreach Script",
+      step: "05", title: "Cold Outreach Script",
       body: `"Hi [Name], maine aapki [profile/website] dekhi — aapko ${skillLabel} mein [specific problem] hai. Main is mein expert hoon aur help kar sakta/sakti hoon. Kya 10 min call ho sakti hai?" Short aur specific rakho.`,
-      color: "from-pink-600 to-pink-700",
-      icon: "✉️",
+      color: "from-pink-600 to-pink-700", icon: "✉️",
     },
     {
-      step: "06",
-      title: "Referrals Maango",
+      step: "06", title: "Referrals Maango",
       body: `Jab pehla ${skillLabel} client mil jaye aur kaam achha ho, poochho: 'Kya aap mujhe kisi aur ke saath refer kar sakte hain?' Word-of-mouth fastest aur free growth hack hai.`,
-      color: "from-cyan-600 to-cyan-700",
-      icon: "🤝",
+      color: "from-cyan-600 to-cyan-700", icon: "🤝",
     },
   ];
 
+  // Parse and normalize saved roadmap
   let savedRoadmap: {
     recommended_courses?: string[];
     career_paths?: string[];
     expected_income?: string;
-    learning_order?: string;
+    timeline?: string;
+    learning_order?: string[];
+    skill_level?: string;
+    skill_score?: number;
+    motivation?: string;
   } | null = null;
+
   if (skillScore?.roadmap_result) {
-    try { savedRoadmap = JSON.parse(skillScore.roadmap_result); } catch {}
+    try {
+      const raw = JSON.parse(skillScore.roadmap_result);
+      savedRoadmap = {
+        ...raw,
+        recommended_courses: toArray(raw.recommended_courses),
+        career_paths:         toArray(raw.career_paths),
+        learning_order:       toArray(raw.learning_order),
+      };
+    } catch {}
   }
+
+  const stepColors = ["#3b82f6", "#22c55e", "#f59e0b", "#a855f7", "#ef4444", "#06b6d4"];
 
   return (
     <div className="min-h-screen bg-[#0F172A] text-white">
 
+      {/* ── HEADER ── */}
       <header className="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur-md sticky top-0 z-40 shadow-lg shadow-black/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -251,43 +263,23 @@ export default function Dashboard() {
             <Badge data-testid="status-subscription" className={user?.subscription_status ? "bg-green-900/40 text-green-300 border-green-600/30" : "bg-red-900/40 text-red-300 border-red-600/30"}>
               {user?.subscription_status ? "Premium Active" : "Free Account"}
             </Badge>
-            <a
-              href="https://wa.me/923124494267?text=Hi%20Byonsoft%20Support!"
-              target="_blank"
-              rel="noopener noreferrer"
-              data-testid="button-whatsapp-support"
-              className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-semibold text-xs px-3 py-1.5 rounded-lg transition-all"
-            >
+            <a href="https://wa.me/923124494267?text=Hi%20Byonsoft%20Support!" target="_blank" rel="noopener noreferrer" data-testid="button-whatsapp-support"
+              className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-semibold text-xs px-3 py-1.5 rounded-lg transition-all">
               <MessageCircle className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">WhatsApp</span>
             </a>
             {user?.subscription_status ? (
-              <Button
-                size="sm"
-                data-testid="button-ai-mentor-header"
-                onClick={() => setLocation("/course/1")}
-                className="bg-purple-600 hover:bg-purple-500 text-white text-xs px-3"
-              >
-                <Brain className="w-3.5 h-3.5 mr-1" />
-                <span className="hidden sm:inline">AI Mentor</span>
-                <span className="sm:hidden">AI</span>
+              <Button size="sm" data-testid="button-ai-mentor-header" onClick={() => setLocation("/course/1")} className="bg-purple-600 hover:bg-purple-500 text-white text-xs px-3">
+                <Brain className="w-3.5 h-3.5 mr-1" /><span className="hidden sm:inline">AI Mentor</span><span className="sm:hidden">AI</span>
               </Button>
             ) : (
-              <Button
-                size="sm"
-                data-testid="button-ai-mentor-locked"
-                onClick={() => setUpgradeOpen(true)}
-                className="bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs px-3 border border-slate-600"
-              >
-                <Lock className="w-3 h-3 mr-1" />
-                <Brain className="w-3.5 h-3.5 mr-1" />
-                <span className="hidden sm:inline">AI Mentor</span>
+              <Button size="sm" data-testid="button-ai-mentor-locked" onClick={() => setUpgradeOpen(true)} className="bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs px-3 border border-slate-600">
+                <Lock className="w-3 h-3 mr-1" /><Brain className="w-3.5 h-3.5 mr-1" /><span className="hidden sm:inline">AI Mentor</span>
               </Button>
             )}
             <Link href="/profile">
               <Button size="sm" variant="ghost" className="text-slate-400 hover:text-white" data-testid="button-profile">
-                <User className="w-4 h-4 mr-1.5" />
-                <span className="hidden sm:inline">Profile</span>
+                <User className="w-4 h-4 mr-1.5" /><span className="hidden sm:inline">Profile</span>
               </Button>
             </Link>
             <Button size="sm" variant="ghost" onClick={() => { logout(); window.location.href = "/"; }} className="text-slate-400 hover:text-white" data-testid="button-logout">
@@ -301,6 +293,7 @@ export default function Dashboard() {
 
         <PWAInstallButton variant="banner" />
 
+        {/* ── WELCOME ── */}
         <div className="bg-gradient-to-r from-blue-900/50 to-slate-800/50 rounded-2xl p-5 sm:p-7 border border-blue-800/30">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
@@ -311,39 +304,21 @@ export default function Dashboard() {
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {!user?.subscription_status && (
-                <Button
-                  data-testid="button-upgrade"
-                  size="sm"
-                  onClick={() => setUpgradeOpen(true)}
-                  className="bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold text-xs px-3"
-                >
-                  <Zap className="w-3.5 h-3.5 mr-1" />
-                  <span className="hidden sm:inline">Upgrade </span>Rs. {price}
+                <Button data-testid="button-upgrade" size="sm" onClick={() => setUpgradeOpen(true)} className="bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold text-xs px-3">
+                  <Zap className="w-3.5 h-3.5 mr-1" /><span className="hidden sm:inline">Upgrade </span>Rs. {price}
                 </Button>
               )}
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={refreshUser}
-                className="border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800 px-2.5"
-                title="Refresh Status"
-              >
-                <Activity className="w-4 h-4" />
-                <span className="hidden sm:inline ml-1.5 text-xs">Refresh</span>
+              <Button size="sm" variant="ghost" onClick={refreshUser} className="border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800 px-2.5" title="Refresh Status">
+                <Activity className="w-4 h-4" /><span className="hidden sm:inline ml-1.5 text-xs">Refresh</span>
               </Button>
             </div>
           </div>
         </div>
 
+        {/* ── STATS ── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Card
-            data-testid="card-giveaway-tracker"
-            className={`relative overflow-hidden backdrop-blur-sm transition-all duration-200 ${
-              isPhase2
-                ? "bg-gradient-to-br from-purple-900/40 to-slate-800/50 border-purple-600/50"
-                : "bg-gradient-to-br from-yellow-900/30 to-slate-800/50 border-yellow-600/50"
-            }`}
-          >
+          <Card data-testid="card-giveaway-tracker"
+            className={`relative overflow-hidden backdrop-blur-sm transition-all duration-200 ${isPhase2 ? "bg-gradient-to-br from-purple-900/40 to-slate-800/50 border-purple-600/50" : "bg-gradient-to-br from-yellow-900/30 to-slate-800/50 border-yellow-600/50"}`}>
             <div className={`absolute inset-x-0 top-0 h-0.5 ${isPhase2 ? "bg-gradient-to-r from-purple-500 to-blue-500" : "bg-gradient-to-r from-yellow-500 to-orange-500"}`} />
             <CardContent className="p-3 sm:p-4">
               <div className="flex items-center gap-2">
@@ -351,20 +326,13 @@ export default function Dashboard() {
                   <Trophy className={`w-4 h-4 sm:w-5 sm:h-5 ${isPhase2 ? "text-purple-300" : "text-yellow-400"}`} />
                 </div>
                 <div className="min-w-0 overflow-hidden">
-                  <p className={`text-xs sm:text-sm font-bold leading-tight truncate ${isPhase2 ? "text-purple-200" : "text-yellow-300"}`}>
-                    {isPhase2 ? "Rs. 1 Lakh" : "Rs. 35,000"}
-                  </p>
-                  <p className={`text-xs truncate ${isPhase2 ? "text-purple-400" : "text-yellow-600"}`}>
-                    {isPhase2 ? "Mega Giveaway" : "Phase 1 Giveaway"}
-                  </p>
-                  <p className="text-slate-500 text-[10px] truncate">
-                    {isPhase2 ? "1000 Members" : "300 Members"}
-                  </p>
+                  <p className={`text-xs sm:text-sm font-bold leading-tight truncate ${isPhase2 ? "text-purple-200" : "text-yellow-300"}`}>{isPhase2 ? "Rs. 1 Lakh" : "Rs. 35,000"}</p>
+                  <p className={`text-xs truncate ${isPhase2 ? "text-purple-400" : "text-yellow-600"}`}>{isPhase2 ? "Mega Giveaway" : "Phase 1 Giveaway"}</p>
+                  <p className="text-slate-500 text-[10px] truncate">{isPhase2 ? "1000 Members" : "300 Members"}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
-
           {[
             { label: "Completed", value: completedCount, icon: Award, color: "text-green-400" },
             { label: "AI Assessment", value: hasAssessment ? "Done ✓" : "Pending", icon: Star, color: hasAssessment ? "text-green-400" : "text-yellow-400" },
@@ -386,57 +354,71 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {savedRoadmap && savedRoadmap.recommended_courses ? (
-          <div data-testid="panel-saved-roadmap" className="space-y-4">
+        {/* ── AI ROADMAP ── */}
+        {savedRoadmap && (savedRoadmap.recommended_courses?.length ?? 0) > 0 ? (
+          <div data-testid="panel-saved-roadmap" className="space-y-5">
+
+            {/* Section header */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-purple-600/30 flex items-center justify-center">
-                  <Brain className="w-4 h-4 text-purple-300" />
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center shadow-lg shadow-purple-900/40">
+                  <Brain className="w-5 h-5 text-white" />
                 </div>
-                <h2 className="text-lg font-bold text-white">Your AI Career Roadmap</h2>
+                <div>
+                  <h2 className="text-xl font-bold text-white">Your AI Career Roadmap</h2>
+                  <p className="text-slate-500 text-xs">Personalized by Byonsoft AI</p>
+                </div>
               </div>
-              <Button
-                data-testid="button-update-roadmap"
-                size="sm"
-                variant="outline"
+              <Button data-testid="button-update-roadmap" size="sm" variant="outline"
                 onClick={() => setLocation("/skill-test?new=1")}
-                className="border-purple-500/40 text-purple-300 hover:bg-purple-900/30 text-xs"
-              >
-                🔄 Update
+                className="border-purple-500/40 text-purple-300 hover:bg-purple-900/30 text-xs gap-1.5">
+                <Sparkles className="w-3.5 h-3.5" /> Retake
               </Button>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              {savedRoadmap.recommended_courses?.length > 0 && (
-                <Card className="bg-slate-800/50 border-slate-700/60 overflow-hidden" data-testid="dash-card-courses">
-                  <div className="h-1 bg-gradient-to-r from-blue-600 to-purple-600" />
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <BookOpen className="w-4 h-4 text-blue-400" />
-                      <p className="text-white font-bold text-sm">Recommended Courses</p>
+            {/* Score + motivation banner */}
+            {(savedRoadmap.skill_score || savedRoadmap.skill_level) && (
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-900/50 via-blue-900/40 to-slate-800/50 border border-purple-500/30 p-5">
+                <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-purple-500 via-blue-400 to-cyan-400" />
+                <div className="flex items-center gap-5">
+                  {savedRoadmap.skill_score && (
+                    <div className="w-16 h-16 rounded-2xl bg-slate-900/60 border border-purple-500/30 flex flex-col items-center justify-center shrink-0">
+                      <span className="text-2xl font-black text-white leading-none">{savedRoadmap.skill_score}</span>
+                      <span className="text-[10px] text-slate-400">/100</span>
                     </div>
-                    <div className="space-y-2">
-                      {savedRoadmap.recommended_courses!.slice(0, 4).map((c, i) => (
-                        <div key={i} className="flex items-center gap-2 text-sm">
-                          <span className="w-5 h-5 rounded-full bg-blue-600/30 text-blue-300 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
-                          <span className="text-slate-300 truncate">{c}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+                  )}
+                  <div className="flex-1 min-w-0">
+                    {savedRoadmap.skill_level && (
+                      <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full border mb-1.5
+                        ${savedRoadmap.skill_level === "Beginner" ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                        : savedRoadmap.skill_level === "Advanced" ? "bg-green-500/20 text-green-300 border-green-500/30"
+                        : "bg-blue-500/20 text-blue-300 border-blue-500/30"}`}>
+                        <Award className="w-3 h-3" /> {savedRoadmap.skill_level}
+                      </span>
+                    )}
+                    {savedRoadmap.motivation && (
+                      <p className="text-slate-300 text-sm italic leading-relaxed">"{savedRoadmap.motivation}"</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
-              {savedRoadmap.career_paths?.length > 0 && (
-                <Card className="bg-slate-800/50 border-slate-700/60" data-testid="dash-card-careers">
+            {/* Career paths + income row */}
+            <div className="grid sm:grid-cols-2 gap-4">
+              {(savedRoadmap.career_paths?.length ?? 0) > 0 && (
+                <Card className="bg-slate-800/50 border-slate-700/60 overflow-hidden" data-testid="dash-card-careers">
+                  <div className="h-0.5 bg-gradient-to-r from-green-500 to-emerald-400" />
                   <CardContent className="p-4">
                     <div className="flex items-center gap-2 mb-3">
-                      <Briefcase className="w-4 h-4 text-green-400" />
+                      <div className="w-7 h-7 rounded-lg bg-green-600/20 flex items-center justify-center">
+                        <Briefcase className="w-3.5 h-3.5 text-green-400" />
+                      </div>
                       <p className="text-white font-bold text-sm">Career Paths</p>
                     </div>
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap gap-2">
                       {savedRoadmap.career_paths!.map((p, i) => (
-                        <Badge key={i} className="bg-green-900/30 border-green-600/30 text-green-300 text-xs px-2.5 py-1">
+                        <Badge key={i} className="bg-green-900/30 border-green-600/30 text-green-300 text-xs px-2.5 py-1 font-medium">
                           {p}
                         </Badge>
                       ))}
@@ -446,39 +428,94 @@ export default function Dashboard() {
               )}
 
               {savedRoadmap.expected_income && (
-                <Card className="bg-gradient-to-r from-emerald-900/40 to-teal-900/30 border-emerald-600/30" data-testid="dash-card-income">
+                <Card className="bg-gradient-to-br from-emerald-900/40 to-teal-900/30 border-emerald-600/30 overflow-hidden" data-testid="dash-card-income">
+                  <div className="h-0.5 bg-gradient-to-r from-emerald-500 to-teal-400" />
                   <CardContent className="p-4">
                     <div className="flex items-center gap-2 mb-2">
-                      <DollarSign className="w-4 h-4 text-emerald-400" />
+                      <div className="w-7 h-7 rounded-lg bg-emerald-600/20 flex items-center justify-center">
+                        <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+                      </div>
                       <p className="text-emerald-300 text-xs font-bold uppercase tracking-widest">Expected Income</p>
                     </div>
-                    <p className="text-white text-base font-bold line-clamp-2 break-words">
+                    <p className="text-white text-lg font-black leading-tight">
                       {savedRoadmap.expected_income.split("\n")[0].trim()}
                     </p>
-                  </CardContent>
-                </Card>
-              )}
-
-              {savedRoadmap.learning_order && (
-                <Card className="bg-slate-800/50 border-slate-700/60 overflow-hidden" data-testid="dash-card-learning">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <ListOrdered className="w-4 h-4 text-cyan-400" />
-                      <p className="text-white font-bold text-sm">Learning Order</p>
-                    </div>
-                    <p className="text-slate-300 text-xs leading-relaxed line-clamp-3">
-                      {savedRoadmap.learning_order.split("\n").slice(0, 3).map((l: string) => l.trim()).filter(Boolean).join(" → ")}
-                    </p>
+                    {savedRoadmap.timeline && (
+                      <div className="flex items-center gap-1.5 mt-2">
+                        <Clock className="w-3 h-3 text-teal-400" />
+                        <p className="text-teal-300 text-xs">{savedRoadmap.timeline}</p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               )}
             </div>
+
+            {/* Recommended Courses */}
+            {(savedRoadmap.recommended_courses?.length ?? 0) > 0 && (
+              <Card className="bg-slate-800/50 border-slate-700/60 overflow-hidden" data-testid="dash-card-courses">
+                <div className="h-0.5 bg-gradient-to-r from-blue-600 to-purple-600" />
+                <CardContent className="p-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-7 h-7 rounded-lg bg-blue-600/20 flex items-center justify-center">
+                      <BookOpen className="w-3.5 h-3.5 text-blue-400" />
+                    </div>
+                    <p className="text-white font-bold text-sm">Recommended Courses</p>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-2.5">
+                    {savedRoadmap.recommended_courses!.map((c, i) => (
+                      <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-slate-700/40 border border-slate-600/40 hover:border-blue-500/30 transition-colors">
+                        <span className="w-6 h-6 rounded-full bg-blue-600/30 text-blue-300 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
+                        <span className="text-slate-200 text-sm leading-snug">{c}</span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Learning Order — FULL, styled steps */}
+            {(savedRoadmap.learning_order?.length ?? 0) > 0 && (
+              <Card className="bg-slate-800/50 border-slate-700/60 overflow-hidden" data-testid="dash-card-learning">
+                <div className="h-0.5 bg-gradient-to-r from-cyan-500 to-blue-500" />
+                <CardContent className="p-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-7 h-7 rounded-lg bg-cyan-600/20 flex items-center justify-center">
+                      <ListOrdered className="w-3.5 h-3.5 text-cyan-400" />
+                    </div>
+                    <p className="text-white font-bold text-sm">Learning Order</p>
+                    <span className="ml-auto text-xs text-slate-500">{savedRoadmap.learning_order!.length} steps</span>
+                  </div>
+                  <div className="space-y-3">
+                    {savedRoadmap.learning_order!.map((step, i) => {
+                      const color = stepColors[i % stepColors.length];
+                      return (
+                        <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-slate-700/30 border border-slate-600/30 hover:bg-slate-700/50 transition-colors">
+                          {/* Step number bubble */}
+                          <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 border-2"
+                            style={{ borderColor: color, color }}>
+                            {i + 1}
+                          </div>
+                          {/* Step text */}
+                          <p className="text-slate-200 text-sm leading-relaxed pt-0.5">{step}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* Progress hint */}
+                  <div className="mt-4 flex items-center gap-2 p-3 rounded-xl bg-blue-600/10 border border-blue-500/20">
+                    <Target className="w-4 h-4 text-blue-400 shrink-0" />
+                    <p className="text-blue-300 text-xs">Ek step complete karo, phir agli — consistency hi success hai!</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
           </div>
         ) : (
-          <div
-            data-testid="banner-ai-roadmap"
-            className="relative overflow-hidden rounded-2xl border border-purple-500/40 bg-gradient-to-br from-purple-900/60 via-blue-900/50 to-slate-900/80 p-8 text-center"
-          >
+          /* ── NO ROADMAP YET ── */
+          <div data-testid="banner-ai-roadmap"
+            className="relative overflow-hidden rounded-2xl border border-purple-500/40 bg-gradient-to-br from-purple-900/60 via-blue-900/50 to-slate-900/80 p-8 text-center">
             <div className="absolute inset-0 opacity-20 bg-gradient-to-br from-purple-900/40 to-blue-900/40 rounded-2xl" />
             <div className="relative z-10 space-y-4">
               <div className="w-14 h-14 rounded-2xl bg-purple-600/40 border border-purple-500/50 flex items-center justify-center mx-auto">
@@ -488,14 +525,9 @@ export default function Dashboard() {
               <p className="text-slate-300 text-base max-w-xl mx-auto">
                 Apna background batao — AI tumhare liye personalized career roadmap banaye ga with recommended courses, career paths, aur income estimates!
               </p>
-              <Button
-                data-testid="button-get-roadmap"
-                size="lg"
-                onClick={() => setLocation("/skill-test?new=1")}
-                className="bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold text-base px-8 py-6 rounded-xl shadow-lg shadow-purple-900/40"
-              >
-                <Brain className="w-5 h-5 mr-2" />
-                Get My Roadmap
+              <Button data-testid="button-get-roadmap" size="lg" onClick={() => setLocation("/skill-test?new=1")}
+                className="bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold text-base px-8 py-6 rounded-xl shadow-lg shadow-purple-900/40">
+                <Brain className="w-5 h-5 mr-2" /> Get My Roadmap
               </Button>
               <div className="flex items-center justify-center gap-6 pt-1 text-slate-400 text-sm">
                 <span className="flex items-center gap-1"><CheckCircle className="w-4 h-4 text-green-400" /> Sirf 2 minute</span>
@@ -506,45 +538,34 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* ── FIRST CLIENT GUIDE ── */}
         <div data-testid="section-first-client-guide">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-8 h-8 rounded-xl bg-emerald-600/30 flex items-center justify-center">
               <Rocket className="w-4 h-4 text-emerald-400" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white">
-                🚀 How to Get Your First Client
-              </h2>
-              {primarySkill && (
-                <p className="text-emerald-400 text-xs font-medium mt-0.5">
-                  Personalized for: {skillLabel}
-                </p>
-              )}
+              <h2 className="text-xl font-bold text-white">🚀 How to Get Your First Client</h2>
+              {primarySkill && <p className="text-emerald-400 text-xs font-medium mt-0.5">Personalized for: {skillLabel}</p>}
             </div>
           </div>
-
           <div className="relative rounded-2xl overflow-hidden border border-emerald-700/30 bg-slate-800/50">
             <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500" />
-            <div
-              data-testid="guide-content"
-              className={`p-6 space-y-4 transition-all duration-300 ${!user?.subscription_status ? "blur-[10px] select-none pointer-events-none" : ""}`}
-            >
+            <div data-testid="guide-content"
+              className={`p-6 space-y-4 transition-all duration-300 ${!user?.subscription_status ? "blur-[10px] select-none pointer-events-none" : ""}`}>
               {firstClientSteps.map((item) => (
                 <div key={item.step} className="flex gap-4 p-3 rounded-xl hover:bg-slate-700/30 transition-colors">
                   <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center shrink-0 text-lg shadow-lg`}>
                     {item.icon}
                   </div>
                   <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-bold text-slate-500">STEP {item.step}</span>
-                    </div>
+                    <span className="text-xs font-bold text-slate-500">STEP {item.step}</span>
                     <p className="text-white font-semibold text-sm mb-1">{item.title}</p>
                     <p className="text-slate-400 text-sm leading-relaxed">{item.body}</p>
                   </div>
                 </div>
               ))}
             </div>
-
             {!user?.subscription_status && (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-900/50 backdrop-blur-sm">
                 <div className="text-center space-y-2">
@@ -554,11 +575,8 @@ export default function Dashboard() {
                   <p className="text-white font-bold text-lg">Premium Content</p>
                   <p className="text-slate-400 text-sm">Personalized client guide — unlock karo premium mein</p>
                 </div>
-                <Button
-                  data-testid="button-unlock-guide"
-                  onClick={() => setUpgradeOpen(true)}
-                  className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold px-6 py-5 text-base shadow-lg shadow-emerald-900/40"
-                >
+                <Button data-testid="button-unlock-guide" onClick={() => setUpgradeOpen(true)}
+                  className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold px-6 py-5 text-base shadow-lg shadow-emerald-900/40">
                   🔓 Unlock for Rs. {price} PKR
                 </Button>
               </div>
@@ -566,22 +584,19 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <MegaLaunchBanner
-          isPremium={!!user?.subscription_status}
-          onUpgrade={() => setUpgradeOpen(true)}
-        />
+        <MegaLaunchBanner isPremium={!!user?.subscription_status} onUpgrade={() => setUpgradeOpen(true)} />
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <ReferralCard />
           <ReferralRewards />
         </div>
 
+        {/* ── PRICING ── */}
         {!user?.subscription_status && (
           <div data-testid="section-pricing-cards">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <Zap className="w-5 h-5 text-blue-400" />
-                Choose Your Plan
+                <Zap className="w-5 h-5 text-blue-400" /> Choose Your Plan
               </h2>
             </div>
             <div className="grid sm:grid-cols-2 gap-4 max-w-2xl">
@@ -605,34 +620,21 @@ export default function Dashboard() {
                 </ul>
                 <div className="text-center text-slate-500 text-xs font-medium py-2">Current Plan</div>
               </div>
-
-              <div
-                className="rounded-2xl border border-blue-500/50 bg-gradient-to-br from-blue-900/30 via-slate-800/50 to-purple-900/20 p-5 relative overflow-hidden"
-                style={{ boxShadow: "0 0 40px -10px rgba(59,130,246,0.25)" }}
-              >
+              <div className="rounded-2xl border border-blue-500/50 bg-gradient-to-br from-blue-900/30 via-slate-800/50 to-purple-900/20 p-5 relative overflow-hidden"
+                style={{ boxShadow: "0 0 40px -10px rgba(59,130,246,0.25)" }}>
                 <div className="absolute top-3 right-3 bg-blue-600 text-white text-xs font-bold px-2.5 py-1 rounded-full">BEST VALUE</div>
                 <p className="text-blue-300 text-xs font-bold uppercase tracking-widest mb-1">Premium</p>
                 <p className="text-3xl font-black text-white mb-0.5">Rs. {price}<span className="text-slate-400 text-sm font-normal">/mo</span></p>
                 <p className="text-slate-400 text-xs mb-4">Unlock everything + giveaway entry</p>
                 <ul className="space-y-2 mb-5 text-sm">
-                  {[
-                    "Unlimited AI Mentor Chat",
-                    "All Premium Courses",
-                    "Saved AI Career Roadmap",
-                    "Giveaway Ticket (Win Rs. 35,000+)",
-                    "Certificate on Completion",
-                  ].map((f) => (
+                  {["Unlimited AI Mentor Chat", "All Premium Courses", "Saved AI Career Roadmap", "Giveaway Ticket (Win Rs. 35,000+)", "Certificate on Completion"].map((f) => (
                     <li key={f} className="flex items-center gap-2 text-slate-200">
-                      <CheckCircle className="w-4 h-4 text-blue-400 shrink-0" />
-                      {f}
+                      <CheckCircle className="w-4 h-4 text-blue-400 shrink-0" /> {f}
                     </li>
                   ))}
                 </ul>
-                <Button
-                  data-testid="button-upgrade-pricing"
-                  onClick={() => setUpgradeOpen(true)}
-                  className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold"
-                >
+                <Button data-testid="button-upgrade-pricing" onClick={() => setUpgradeOpen(true)}
+                  className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold">
                   <Zap className="w-4 h-4 mr-2" /> Upgrade Now
                 </Button>
               </div>
@@ -640,11 +642,11 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* ── COURSES ── */}
         <div>
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-blue-400" />
-              All Courses
+              <BookOpen className="w-5 h-5 text-blue-400" /> All Courses
               {hasRoadmapMatches && (
                 <span className="text-xs font-normal text-purple-400 bg-purple-900/30 border border-purple-700/40 px-2 py-0.5 rounded-full ml-1">
                   ⭐ Sorted by your roadmap
@@ -656,21 +658,15 @@ export default function Dashboard() {
           {hasRoadmapMatches && (
             <div className="mb-5 flex items-center gap-2.5 p-3 rounded-xl bg-purple-900/20 border border-purple-700/30">
               <span className="text-lg">⭐</span>
-              <p className="text-purple-200 text-sm font-medium">
-                Courses matching your AI roadmap are shown first.
-              </p>
+              <p className="text-purple-200 text-sm font-medium">Courses matching your AI roadmap are shown first.</p>
             </div>
           )}
 
           {!user?.subscription_status && (
             <div className="mb-4 p-3 rounded-lg bg-yellow-900/20 border border-yellow-700/30 flex items-center gap-3">
               <Lock className="w-5 h-5 text-yellow-400 shrink-0" />
-              <p className="text-yellow-300 text-sm">
-                Upgrade to Premium (Rs. {price}/month) to unlock all courses and AI features
-              </p>
-              <Button size="sm" onClick={() => setUpgradeOpen(true)} className="ml-auto bg-yellow-600 text-white shrink-0">
-                Upgrade
-              </Button>
+              <p className="text-yellow-300 text-sm">Upgrade to Premium (Rs. {price}/month) to unlock all courses and AI features</p>
+              <Button size="sm" onClick={() => setUpgradeOpen(true)} className="ml-auto bg-yellow-600 text-white shrink-0">Upgrade</Button>
             </div>
           )}
 
@@ -691,87 +687,47 @@ export default function Dashboard() {
                   const isCompleted = prog?.is_completed === true;
                   const progressPct = prog ? Math.min(100, (prog.lessons_completed / 10) * 100) : 0;
                   const isRecommended = isTagMatch(course);
-
                   return (
-                    <Card
-                      key={course.id}
-                      data-testid={`card-course-${course.id}`}
-                      className={`
-                        relative group transition-all duration-300 cursor-pointer overflow-hidden
-                        ${isRecommended
-                          ? "bg-gradient-to-br from-purple-900/20 via-slate-800/60 to-slate-800/50 border-purple-500/50 hover:-translate-y-1 hover:shadow-xl hover:shadow-purple-900/30"
-                          : isLocked
-                          ? "bg-slate-800/50 border-slate-700/60 opacity-70 hover:border-yellow-600/30"
-                          : isCompleted
-                          ? "bg-slate-800/50 border-green-600/40 hover:border-green-500/60 hover:-translate-y-1 hover:shadow-xl hover:shadow-green-900/20"
-                          : "bg-slate-800/50 border-slate-700/60 hover:border-blue-500/40 hover:-translate-y-1 hover:shadow-xl hover:shadow-blue-900/20"
-                        }
-                      `}
-                      onClick={() => {
-                        if (isLocked) setUpgradeOpen(true);
-                        else setLocation(`/course/${course.id}`);
-                      }}
-                    >
-                      {isRecommended && (
-                        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-500 via-blue-400 to-purple-500" />
-                      )}
-                      {!isRecommended && isCompleted && (
-                        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-green-500 to-emerald-400" />
-                      )}
-
+                    <Card key={course.id} data-testid={`card-course-${course.id}`}
+                      className={`relative group transition-all duration-300 cursor-pointer overflow-hidden
+                        ${isRecommended ? "bg-gradient-to-br from-purple-900/20 via-slate-800/60 to-slate-800/50 border-purple-500/50 hover:-translate-y-1 hover:shadow-xl hover:shadow-purple-900/30"
+                        : isLocked ? "bg-slate-800/50 border-slate-700/60 opacity-70 hover:border-yellow-600/30"
+                        : isCompleted ? "bg-slate-800/50 border-green-600/40 hover:border-green-500/60 hover:-translate-y-1 hover:shadow-xl hover:shadow-green-900/20"
+                        : "bg-slate-800/50 border-slate-700/60 hover:border-blue-500/40 hover:-translate-y-1 hover:shadow-xl hover:shadow-blue-900/20"}`}
+                      onClick={() => { if (isLocked) setUpgradeOpen(true); else setLocation(`/course/${course.id}`); }}>
+                      {isRecommended && <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-500 via-blue-400 to-purple-500" />}
+                      {!isRecommended && isCompleted && <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-green-500 to-emerald-400" />}
                       <CardContent className="p-5">
                         <div className="flex items-start justify-between gap-2 mb-3">
                           <div className="flex flex-col gap-1.5">
-                            <Badge className={`text-xs w-fit ${categoryColors[course.category] || "bg-slate-700 text-slate-300"}`}>
-                              {course.category}
-                            </Badge>
+                            <Badge className={`text-xs w-fit ${categoryColors[course.category] || "bg-slate-700 text-slate-300"}`}>{course.category}</Badge>
                             {isRecommended && (
-                              <span
-                                data-testid={`badge-recommended-${course.id}`}
-                                className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-200 bg-purple-900/40 border border-purple-500/40 px-2 py-0.5 rounded-full w-fit"
-                              >
+                              <span data-testid={`badge-recommended-${course.id}`}
+                                className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-200 bg-purple-900/40 border border-purple-500/40 px-2 py-0.5 rounded-full w-fit">
                                 ⭐ Recommended
                               </span>
                             )}
                           </div>
-                          {isLocked ? (
-                            <Lock className="w-4 h-4 text-slate-500 shrink-0" />
-                          ) : isCompleted ? (
-                            <Award className="w-4 h-4 text-green-400 shrink-0" />
-                          ) : (
-                            <ChevronRight className={`w-4 h-4 shrink-0 transition-colors ${isRecommended ? "text-purple-400 group-hover:text-purple-300" : "text-slate-500 group-hover:text-blue-400"}`} />
-                          )}
+                          {isLocked ? <Lock className="w-4 h-4 text-slate-500 shrink-0" />
+                            : isCompleted ? <Award className="w-4 h-4 text-green-400 shrink-0" />
+                            : <ChevronRight className={`w-4 h-4 shrink-0 transition-colors ${isRecommended ? "text-purple-400 group-hover:text-purple-300" : "text-slate-500 group-hover:text-blue-400"}`} />}
                         </div>
-                        <h3 className={`font-semibold mb-1 leading-snug transition-colors ${isRecommended ? "text-white group-hover:text-purple-100" : "text-white group-hover:text-blue-100"}`}>
-                          {course.title}
-                        </h3>
+                        <h3 className={`font-semibold mb-1 leading-snug transition-colors ${isRecommended ? "text-white group-hover:text-purple-100" : "text-white group-hover:text-blue-100"}`}>{course.title}</h3>
                         <p className="text-slate-400 text-xs mb-4 line-clamp-2">{course.description}</p>
-
                         <div className="space-y-1.5 mb-3">
                           <div className="flex justify-between text-xs text-slate-400">
                             <span>Progress</span>
-                            <span className={isCompleted ? "text-green-400 font-medium" : ""}>
-                              {isCompleted ? "Completed!" : `${prog?.lessons_completed ?? 0}/10 lessons`}
-                            </span>
+                            <span className={isCompleted ? "text-green-400 font-medium" : ""}>{isCompleted ? "Completed!" : `${prog?.lessons_completed ?? 0}/10 lessons`}</span>
                           </div>
                           <Progress value={isCompleted ? 100 : progressPct} className={`h-1.5 ${isCompleted ? "bg-slate-700 [&>div]:bg-green-500" : "bg-slate-700"}`} />
                         </div>
-
                         {isCompleted && !isLocked && (
-                          <Button
-                            data-testid={`button-certificate-${course.id}`}
-                            size="sm"
+                          <Button data-testid={`button-certificate-${course.id}`} size="sm"
                             className="w-full bg-gradient-to-r from-green-700 to-emerald-600 hover:from-green-600 hover:to-emerald-500 text-white font-medium text-xs gap-1.5 mt-1"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              downloadCertificate(course);
-                            }}
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                            Download Certificate
+                            onClick={(e) => { e.stopPropagation(); downloadCertificate(course); }}>
+                            <Download className="w-3.5 h-3.5" /> Download Certificate
                           </Button>
                         )}
-
                         {isLocked && (
                           <div className="mt-3 text-center">
                             <span className="text-xs text-yellow-400 font-medium flex items-center justify-center gap-1">
@@ -787,6 +743,7 @@ export default function Dashboard() {
         </div>
       </main>
 
+      {/* ── FOOTER ── */}
       <footer className="border-t border-slate-800/60 bg-slate-900 mt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -800,15 +757,9 @@ export default function Dashboard() {
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-5 text-slate-400 text-sm">
-              <Link href="/contact" className="hover:text-white transition-colors flex items-center gap-1.5">
-                <Phone className="w-3.5 h-3.5" /> Contact Us
-              </Link>
-              <Link href="/privacy" className="hover:text-white transition-colors flex items-center gap-1.5">
-                <ShieldIcon className="w-3.5 h-3.5" /> Privacy Policy
-              </Link>
-              <Link href="/terms" className="hover:text-white transition-colors flex items-center gap-1.5">
-                <FileText className="w-3.5 h-3.5" /> Terms & Conditions
-              </Link>
+              <Link href="/contact" className="hover:text-white transition-colors flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> Contact Us</Link>
+              <Link href="/privacy" className="hover:text-white transition-colors flex items-center gap-1.5"><ShieldIcon className="w-3.5 h-3.5" /> Privacy Policy</Link>
+              <Link href="/terms" className="hover:text-white transition-colors flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> Terms & Conditions</Link>
             </div>
             <p className="text-slate-600 text-xs">© {new Date().getFullYear()} Byonsoft OS. All rights reserved.</p>
           </div>
