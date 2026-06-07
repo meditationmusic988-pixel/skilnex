@@ -226,9 +226,9 @@ export default function SkillTest() {
     const msgInt = setInterval(() => {
       mi = (mi + 1) % LOADING_MSGS.length;
       setLoadingMsgIdx(mi);
-    }, 7500); // 30s / 4 messages = 7.5s each
+    }, 1400);
     setTimeout(() => setMeterVals([85, 72, 90]), 300);
-    setTimeout(() => { clearInterval(msgInt); callAI(); }, 30000); // ← 30 seconds
+    setTimeout(() => { clearInterval(msgInt); callAI(); }, 5500);
   };
 
   const callAI = async () => {
