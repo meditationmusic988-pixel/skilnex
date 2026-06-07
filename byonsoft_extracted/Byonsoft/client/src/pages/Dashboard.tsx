@@ -54,7 +54,6 @@ export default function Dashboard() {
     return progressList.find((p) => p.course_id === courseId);
   };
 
-  // ── SMART COURSE PRIORITY ─────────────────────────────────────────────────
   const roadmapSkills = useMemo(() => {
     const raw: string[] = [];
     if (skillScore?.roadmap_result) {
@@ -174,7 +173,6 @@ export default function Dashboard() {
 
   const completedCount = progressList.filter((p) => p.is_completed).length;
 
-  // ── DYNAMIC FIRST CLIENT STEPS based on roadmap skill ────────────────────
   const primarySkill = roadmapSkills[0] || "";
   const skillLabel = primarySkill
     ? primarySkill.split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
@@ -225,7 +223,6 @@ export default function Dashboard() {
     },
   ];
 
-  // ── SAVED ROADMAP ─────────────────────────────────────────────────────────
   let savedRoadmap: {
     recommended_courses?: string[];
     career_paths?: string[];
@@ -239,7 +236,6 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-[#0F172A] text-white">
 
-      {/* ── HEADER ── */}
       <header className="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur-md sticky top-0 z-40 shadow-lg shadow-black/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -294,7 +290,7 @@ export default function Dashboard() {
                 <span className="hidden sm:inline">Profile</span>
               </Button>
             </Link>
-            <Button size="sm" variant="ghost" onClick={logout} className="text-slate-400 hover:text-white" data-testid="button-logout">
+            <Button size="sm" variant="ghost" onClick={() => { logout(); window.location.href = "/"; }} className="text-slate-400 hover:text-white" data-testid="button-logout">
               <LogOut className="w-4 h-4" />
             </Button>
           </div>
@@ -303,10 +299,8 @@ export default function Dashboard() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
 
-        {/* ── PWA INSTALL ── */}
         <PWAInstallButton variant="banner" />
 
-        {/* ── WELCOME BANNER ── */}
         <div className="bg-gradient-to-r from-blue-900/50 to-slate-800/50 rounded-2xl p-5 sm:p-7 border border-blue-800/30">
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
@@ -341,7 +335,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* ── STATS ROW ── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Card
             data-testid="card-giveaway-tracker"
@@ -393,12 +386,8 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* ══════════════════════════════════════════════════════════
-            SECTION 1 — AI SKILL TEST / CAREER ROADMAP
-        ══════════════════════════════════════════════════════════ */}
         {savedRoadmap && savedRoadmap.recommended_courses ? (
           <div data-testid="panel-saved-roadmap" className="space-y-4">
-            {/* Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-xl bg-purple-600/30 flex items-center justify-center">
@@ -410,14 +399,13 @@ export default function Dashboard() {
                 data-testid="button-update-roadmap"
                 size="sm"
                 variant="outline"
-                onClick={() => setLocation("/skill-test")}
+                onClick={() => setLocation("/skill-test?new=1")}
                 className="border-purple-500/40 text-purple-300 hover:bg-purple-900/30 text-xs"
               >
                 🔄 Update
               </Button>
             </div>
 
-            {/* Roadmap Cards Grid */}
             <div className="grid gap-3 sm:grid-cols-2">
               {savedRoadmap.recommended_courses?.length > 0 && (
                 <Card className="bg-slate-800/50 border-slate-700/60 overflow-hidden" data-testid="dash-card-courses">
@@ -479,7 +467,7 @@ export default function Dashboard() {
                       <p className="text-white font-bold text-sm">Learning Order</p>
                     </div>
                     <p className="text-slate-300 text-xs leading-relaxed line-clamp-3">
-                      {savedRoadmap.learning_order.split("\n").slice(0, 3).map(l => l.trim()).filter(Boolean).join(" → ")}
+                      {savedRoadmap.learning_order.split("\n").slice(0, 3).map((l: string) => l.trim()).filter(Boolean).join(" → ")}
                     </p>
                   </CardContent>
                 </Card>
@@ -487,7 +475,6 @@ export default function Dashboard() {
             </div>
           </div>
         ) : (
-          /* No roadmap yet — CTA banner */
           <div
             data-testid="banner-ai-roadmap"
             className="relative overflow-hidden rounded-2xl border border-purple-500/40 bg-gradient-to-br from-purple-900/60 via-blue-900/50 to-slate-900/80 p-8 text-center"
@@ -504,7 +491,7 @@ export default function Dashboard() {
               <Button
                 data-testid="button-get-roadmap"
                 size="lg"
-                onClick={() => setLocation("/skill-test")}
+                onClick={() => setLocation("/skill-test?new=1")}
                 className="bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold text-base px-8 py-6 rounded-xl shadow-lg shadow-purple-900/40"
               >
                 <Brain className="w-5 h-5 mr-2" />
@@ -519,9 +506,6 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ══════════════════════════════════════════════════════════
-            SECTION 2 — HOW TO GET YOUR FIRST CLIENT (DYNAMIC)
-        ══════════════════════════════════════════════════════════ */}
         <div data-testid="section-first-client-guide">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-8 h-8 rounded-xl bg-emerald-600/30 flex items-center justify-center">
@@ -582,9 +566,6 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* ══════════════════════════════════════════════════════════
-            SECTION 3 — CASH GIVEAWAY + REFERRAL
-        ══════════════════════════════════════════════════════════ */}
         <MegaLaunchBanner
           isPremium={!!user?.subscription_status}
           onUpgrade={() => setUpgradeOpen(true)}
@@ -595,7 +576,6 @@ export default function Dashboard() {
           <ReferralRewards />
         </div>
 
-        {/* ── PRICING CARDS (free users only) ── */}
         {!user?.subscription_status && (
           <div data-testid="section-pricing-cards">
             <div className="flex items-center justify-between mb-4">
@@ -660,9 +640,6 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ══════════════════════════════════════════════════════════
-            SECTION 4 — ALL COURSES
-        ══════════════════════════════════════════════════════════ */}
         <div>
           <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -810,7 +787,6 @@ export default function Dashboard() {
         </div>
       </main>
 
-      {/* ── FOOTER ── */}
       <footer className="border-t border-slate-800/60 bg-slate-900 mt-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
