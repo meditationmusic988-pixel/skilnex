@@ -53,12 +53,20 @@ export default function CourseViewer() {
   const lessonsCompleted = myProgress?.lessons_completed ?? 0;
   const totalLessons = lessons.length || 1;
   const progressPct = Math.round((lessonsCompleted / totalLessons) * 100);
+
   const activeLesson = lessons.find((l) => l.id === activeLessonId) ?? lessons[0] ?? null;
   const activeLessonIndex = lessons.findIndex((l) => l.id === activeLessonId);
-  const isLessonCompleted = (idx: number) => idx < lessonsCompleted;
-  const canMarkComplete = activeLessonIndex >= lessonsCompleted;
 
-  // Group lessons by module_name, preserving insertion order
+  // ✅ A lesson is completed if its index is less than lessonsCompleted count
+  const isLessonCompleted = (globalIdx: number) => globalIdx < lessonsCompleted;
+
+  // ✅ Current active lesson is completed if its index < lessonsCompleted
+  const isActiveLessonAlreadyDone = activeLessonIndex !== -1 && isLessonCompleted(activeLessonIndex);
+
+  // ✅ Show Mark Complete button only if the active lesson is NOT yet completed
+  const canMarkComplete = activeLessonIndex !== -1 && !isActiveLessonAlreadyDone;
+
+  // Group lessons by module_name
   const modules = useMemo<LessonModule[]>(() => {
     const map = new Map<string, Lesson[]>();
     lessons.forEach((lesson) => {
@@ -69,7 +77,6 @@ export default function CourseViewer() {
     return [...map.entries()].map(([name, ls]) => ({ name, lessons: ls }));
   }, [lessons]);
 
-  // All module names open by default so the list is immediately visible
   const defaultOpenModules = useMemo(() => modules.map((m) => m.name), [modules]);
 
   useEffect(() => {
@@ -79,19 +86,45 @@ export default function CourseViewer() {
   }, [lessons, activeLessonId]);
 
   const updateProgress = useMutation({
-    mutationFn: async (completed: number) => {
+    mutationFn: async (newCompletedCount: number) => {
       const res = await apiRequest("POST", "/api/progress", {
         course_id: Number(id),
-        lessons_completed: completed,
-        is_completed: completed >= totalLessons,
+        lessons_completed: newCompletedCount,
+        is_completed: newCompletedCount >= totalLessons,
       });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_, newCompletedCount) => {
       queryClient.invalidateQueries({ queryKey: ["/api/progress"] });
-      toast({ title: "Progress updated!" });
+      const isFullyDone = newCompletedCount >= totalLessons;
+      toast({
+        title: isFullyDone ? "🎉 Course Complete!" : "✅ Lesson Marked Complete",
+        description: isFullyDone
+          ? "Mubarak ho! Aapne yeh course complete kar liya."
+          : `${newCompletedCount} of ${totalLessons} lessons done.`,
+      });
+      // Auto-advance to next lesson if available
+      if (!isFullyDone) {
+        const nextLesson = lessons[newCompletedCount]; // index = newCompletedCount
+        if (nextLesson) setActiveLessonId(nextLesson.id);
+      }
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Progress save nahi hua. Dobara try karo.",
+        variant: "destructive",
+      });
     },
   });
+
+  const handleMarkComplete = () => {
+    if (activeLessonIndex === -1) return;
+    // New completed count = max of current or (activeLessonIndex + 1)
+    // This ensures we never go backwards
+    const newCount = Math.max(lessonsCompleted, activeLessonIndex + 1);
+    updateProgress.mutate(newCount);
+  };
 
   const askMentor = async () => {
     if (!question.trim() || !course) return;
@@ -141,13 +174,8 @@ export default function CourseViewer() {
       {/* Header */}
       <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-sm sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center gap-4">
-          <Button
-            size="icon"
-            variant="ghost"
-            data-testid="button-back"
-            onClick={() => setLocation("/dashboard")}
-            className="text-slate-400"
-          >
+          <Button size="icon" variant="ghost" data-testid="button-back"
+            onClick={() => setLocation("/dashboard")} className="text-slate-400">
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div className="flex-1 min-w-0">
@@ -159,29 +187,21 @@ export default function CourseViewer() {
               )}
             </div>
           </div>
-          <a
-            href="https://wa.me/923124494267?text=Hi%20Byonsoft%20Support!"
-            target="_blank"
-            rel="noopener noreferrer"
-            data-testid="button-whatsapp-course"
-            className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-semibold text-xs px-3 py-1.5 rounded-lg transition-all shrink-0"
-          >
+          <a href="https://wa.me/923124494267?text=Hi%20Byonsoft%20Support!"
+            target="_blank" rel="noopener noreferrer" data-testid="button-whatsapp-course"
+            className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-semibold text-xs px-3 py-1.5 rounded-lg transition-all shrink-0">
             <MessageCircle className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">WhatsApp</span>
           </a>
-          <Button
-            data-testid="button-ai-mentor"
-            onClick={() => setChatOpen(true)}
-            className="bg-purple-600 text-white shrink-0"
-            size="sm"
-          >
+          <Button data-testid="button-ai-mentor" onClick={() => setChatOpen(true)}
+            className="bg-purple-600 text-white shrink-0" size="sm">
             <MessageSquare className="w-4 h-4 mr-2" /> AI Mentor
           </Button>
         </div>
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 grid lg:grid-cols-3 gap-6">
-        {/* Video Player + Description */}
+        {/* Video Player + Lesson Info */}
         <div className="lg:col-span-2 space-y-4">
           <div className="aspect-video w-full rounded-xl overflow-hidden bg-slate-900 border border-slate-700 relative">
             {lessonsLoading ? (
@@ -204,31 +224,41 @@ export default function CourseViewer() {
             )}
           </div>
 
-          {/* Active lesson info */}
+          {/* Active lesson info + Mark Complete */}
           {activeLesson && (
             <Card className="bg-slate-800/60 border-slate-700">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-4">
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <h2 className="font-semibold text-white">{activeLesson.title}</h2>
                     <p className="text-slate-400 text-sm mt-1">{course.description}</p>
+                    {/* Lesson position indicator */}
+                    <p className="text-slate-500 text-xs mt-2">
+                      Lesson {activeLessonIndex + 1} of {totalLessons}
+                    </p>
                   </div>
-                  {canMarkComplete && (
-                    <Button
-                      data-testid="button-mark-complete"
-                      size="sm"
-                      className="bg-green-600 text-white shrink-0"
-                      disabled={updateProgress.isPending}
-                      onClick={() => updateProgress.mutate(activeLessonIndex + 1)}
-                    >
-                      {updateProgress.isPending ? "Saving..." : "Mark Complete"}
-                    </Button>
-                  )}
-                  {!canMarkComplete && activeLessonIndex !== -1 && (
-                    <Badge className="bg-green-900/40 text-green-300 border-green-600/30 shrink-0">
-                      <CheckCircle className="w-3 h-3 mr-1" /> Done
-                    </Badge>
-                  )}
+
+                  <div className="shrink-0">
+                    {canMarkComplete ? (
+                      <Button
+                        data-testid="button-mark-complete"
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-500 text-white font-semibold gap-1.5"
+                        disabled={updateProgress.isPending}
+                        onClick={handleMarkComplete}
+                      >
+                        {updateProgress.isPending ? (
+                          <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving...</>
+                        ) : (
+                          <><CheckCircle className="w-3.5 h-3.5" /> Mark Complete</>
+                        )}
+                      </Button>
+                    ) : isActiveLessonAlreadyDone ? (
+                      <Badge className="bg-green-900/40 text-green-300 border-green-600/30 px-3 py-1.5">
+                        <CheckCircle className="w-3 h-3 mr-1.5" /> Completed
+                      </Badge>
+                    ) : null}
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -237,7 +267,7 @@ export default function CourseViewer() {
 
         {/* Sidebar */}
         <div className="space-y-4">
-          {/* Progress */}
+          {/* Progress Card */}
           <Card className="bg-slate-800/60 border-slate-700">
             <CardHeader className="pb-2">
               <CardTitle className="text-white text-sm flex items-center gap-2">
@@ -260,7 +290,7 @@ export default function CourseViewer() {
             </CardContent>
           </Card>
 
-          {/* Course Content — Accordion grouped by module */}
+          {/* Course Content */}
           <Card className="bg-slate-800/60 border-slate-700">
             <CardHeader className="pb-2 px-4 pt-4">
               <CardTitle className="text-white text-sm flex items-center justify-between">
@@ -283,11 +313,8 @@ export default function CourseViewer() {
               ) : lessons.length === 0 ? (
                 <p className="text-slate-500 text-sm text-center py-6 px-4">No lessons yet</p>
               ) : (
-                <Accordion
-                  type="multiple"
-                  defaultValue={defaultOpenModules}
-                  className="w-full divide-y divide-slate-700/50"
-                >
+                <Accordion type="multiple" defaultValue={defaultOpenModules}
+                  className="w-full divide-y divide-slate-700/50">
                   {modules.map((mod, modIdx) => {
                     const completedInModule = mod.lessons.filter((l) =>
                       isLessonCompleted(lessons.findIndex((x) => x.id === l.id))
@@ -295,26 +322,18 @@ export default function CourseViewer() {
                     const allDone = completedInModule === mod.lessons.length;
 
                     return (
-                      <AccordionItem
-                        key={mod.name}
-                        value={mod.name}
-                        className="border-0"
-                      >
-                        <AccordionTrigger
-                          data-testid={`module-${mod.name}`}
-                          className="px-4 py-3 bg-slate-700/50 hover:bg-slate-700 hover:no-underline data-[state=open]:bg-slate-700/80 transition-colors"
-                        >
+                      <AccordionItem key={mod.name} value={mod.name} className="border-0">
+                        <AccordionTrigger data-testid={`module-${mod.name}`}
+                          className="px-4 py-3 bg-slate-700/50 hover:bg-slate-700 hover:no-underline data-[state=open]:bg-slate-700/80 transition-colors">
                           <div className="flex items-center gap-3 flex-1 min-w-0 mr-2 text-left">
                             <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 font-bold text-sm ${allDone ? "bg-green-600/30 text-green-400" : "bg-blue-600/30 text-blue-300"}`}>
-                              {modIdx + 1}
+                              {allDone ? <CheckCircle className="w-4 h-4" /> : modIdx + 1}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-white text-sm font-semibold leading-tight truncate">
-                                {mod.name}
-                              </p>
+                              <p className="text-white text-sm font-semibold leading-tight truncate">{mod.name}</p>
                               <p className="text-slate-400 text-[11px] mt-0.5">
                                 {completedInModule}/{mod.lessons.length} lessons
-                                {allDone && <span className="text-green-400 ml-1">· Complete</span>}
+                                {allDone && <span className="text-green-400 ml-1">· Complete ✓</span>}
                               </p>
                             </div>
                           </div>
@@ -330,18 +349,15 @@ export default function CourseViewer() {
                                 const completed = isLessonCompleted(globalIdx);
                                 const active = lesson.id === activeLessonId;
                                 return (
-                                  <button
-                                    key={lesson.id}
-                                    data-testid={`lesson-${lesson.id}`}
+                                  <button key={lesson.id} data-testid={`lesson-${lesson.id}`}
                                     onClick={() => setActiveLessonId(lesson.id)}
                                     className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-all ${
                                       active
                                         ? "bg-blue-600/20 border-l-2 border-blue-500 text-blue-300"
                                         : completed
-                                        ? "text-green-400 hover:bg-slate-700/40 border-l-2 border-transparent"
+                                        ? "text-green-400 hover:bg-slate-700/40 border-l-2 border-green-500/40"
                                         : "text-slate-300 hover:bg-slate-700/40 hover:text-white border-l-2 border-transparent"
-                                    }`}
-                                  >
+                                    }`}>
                                     <div className="shrink-0 ml-2">
                                       {completed ? (
                                         <CheckCircle className="w-4 h-4 text-green-400" />
@@ -354,10 +370,13 @@ export default function CourseViewer() {
                                       )}
                                     </div>
                                     <span className="text-xs leading-snug flex-1 truncate">{lesson.title}</span>
-                                    {active && (
+                                    {active && !completed && (
                                       <span className="text-[10px] text-blue-400 font-semibold shrink-0 bg-blue-900/40 px-1.5 py-0.5 rounded">
                                         Playing
                                       </span>
+                                    )}
+                                    {completed && (
+                                      <span className="text-[10px] text-green-400 font-semibold shrink-0">✓</span>
                                     )}
                                   </button>
                                 );
@@ -374,7 +393,7 @@ export default function CourseViewer() {
         </div>
       </div>
 
-      {/* Floating AI Chat Widget */}
+      {/* Floating AI Chat */}
       {chatOpen && (
         <div className="fixed bottom-6 right-6 w-96 max-w-[calc(100vw-2rem)] bg-slate-800 border border-slate-600 rounded-xl shadow-2xl z-50">
           <div className="flex items-center justify-between p-4 border-b border-slate-700">
@@ -393,7 +412,6 @@ export default function CourseViewer() {
               <X className="w-4 h-4" />
             </Button>
           </div>
-
           <div className="p-4 space-y-3">
             {answer && (
               <div className="bg-slate-700/60 rounded-lg p-3 max-h-[60vh] overflow-y-auto">
@@ -402,27 +420,16 @@ export default function CourseViewer() {
               </div>
             )}
             <div className="space-y-2">
-              <Textarea
-                data-testid="input-question"
+              <Textarea data-testid="input-question"
                 placeholder="Ask your question about this lesson..."
                 className="bg-slate-700/60 border-slate-600 text-white placeholder:text-slate-500 resize-none text-sm"
-                rows={3}
-                value={question}
+                rows={3} value={question}
                 onChange={(e) => setQuestion(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    askMentor();
-                  }
-                }}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); askMentor(); } }}
               />
-              <Button
-                data-testid="button-ask-mentor"
-                onClick={askMentor}
+              <Button data-testid="button-ask-mentor" onClick={askMentor}
                 disabled={!question.trim() || chatLoading}
-                className="w-full bg-purple-600 text-white"
-                size="sm"
-              >
+                className="w-full bg-purple-600 text-white" size="sm">
                 {chatLoading ? (
                   <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Thinking...</>
                 ) : (
