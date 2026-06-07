@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import type { SkillScore } from "@shared/schema";
 
-/* ─── Types ─────────────────────────────────────────────────── */
 interface RoadmapResult {
   skill_level: string;
   skill_score: number;
@@ -36,7 +35,6 @@ interface SkillRating {
   value: number;
 }
 
-/* ─── Constants ──────────────────────────────────────────────── */
 const DEVICE_OPTIONS = [
   { label: "Sirf Mobile", value: "Mobile only", icon: Smartphone },
   { label: "Laptop", value: "Laptop", icon: Laptop },
@@ -54,17 +52,16 @@ const LOADING_MSGS = [
 const SKILL_LEVELS = ["Bilkul Nahi", "Thoda Thoda", "Theek Hai", "Acha Hoon", "Expert"];
 
 const INITIAL_SKILLS: SkillRating[] = [
-  { id: "design",    label: "Graphic Design",     description: "Canva, Photoshop, posters",    icon: Palette,      color: "#a855f7", value: 0 },
-  { id: "writing",   label: "Content Writing",    description: "Blogs, captions, copywriting", icon: PenTool,      color: "#3b82f6", value: 0 },
-  { id: "marketing", label: "Digital Marketing",  description: "SEO, ads, social media",       icon: Megaphone,    color: "#f59e0b", value: 0 },
-  { id: "video",     label: "Video Editing",      description: "Reels, YouTube, TikTok",       icon: Video,        color: "#ef4444", value: 0 },
-  { id: "coding",    label: "Programming",        description: "Web, apps, automation",        icon: Code2,        color: "#22c55e", value: 0 },
-  { id: "ecom",      label: "E-Commerce",         description: "Daraz, Amazon, dropshipping",  icon: Globe,        color: "#06b6d4", value: 0 },
-  { id: "photo",     label: "Photography",        description: "Product, portrait, editing",   icon: Camera,       color: "#f97316", value: 0 },
-  { id: "sales",     label: "Sales & CRM",        description: "Client handling, proposals",   icon: MessageSquare,color: "#ec4899", value: 0 },
+  { id: "design",    label: "Graphic Design",     description: "Canva, Photoshop, posters",    icon: Palette,       color: "#a855f7", value: 0 },
+  { id: "writing",   label: "Content Writing",    description: "Blogs, captions, copywriting", icon: PenTool,       color: "#3b82f6", value: 0 },
+  { id: "marketing", label: "Digital Marketing",  description: "SEO, ads, social media",       icon: Megaphone,     color: "#f59e0b", value: 0 },
+  { id: "video",     label: "Video Editing",      description: "Reels, YouTube, TikTok",       icon: Video,         color: "#ef4444", value: 0 },
+  { id: "coding",    label: "Programming",        description: "Web, apps, automation",        icon: Code2,         color: "#22c55e", value: 0 },
+  { id: "ecom",      label: "E-Commerce",         description: "Daraz, Amazon, dropshipping",  icon: Globe,         color: "#06b6d4", value: 0 },
+  { id: "photo",     label: "Photography",        description: "Product, portrait, editing",   icon: Camera,        color: "#f97316", value: 0 },
+  { id: "sales",     label: "Sales & CRM",        description: "Client handling, proposals",   icon: MessageSquare, color: "#ec4899", value: 0 },
 ];
 
-/* ─── Sub-components ─────────────────────────────────────────── */
 function AnimatedNumber({ target }: { target: number }) {
   const [val, setVal] = useState(0);
   useEffect(() => {
@@ -128,12 +125,10 @@ function StepDot({ n, state }: { n: number; state: "done" | "active" | "idle" })
   );
 }
 
-/* ─── Skill Slider Card ──────────────────────────────────────── */
 function SkillSliderCard({ skill, onChange }: { skill: SkillRating; onChange: (id: string, val: number) => void }) {
   const Icon = skill.icon;
   const levelLabel = SKILL_LEVELS[skill.value];
   const pct = (skill.value / 4) * 100;
-
   return (
     <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 transition-all hover:border-slate-700">
       <div className="flex items-center gap-3 mb-3">
@@ -144,26 +139,21 @@ function SkillSliderCard({ skill, onChange }: { skill: SkillRating; onChange: (i
           <p className="text-sm font-semibold text-white">{skill.label}</p>
           <p className="text-xs text-slate-500 truncate">{skill.description}</p>
         </div>
-        <span className="text-xs font-bold px-2.5 py-1 rounded-full shrink-0"
-          style={{ background: skill.color + "20", color: skill.color }}>
+        <span className="text-xs font-bold px-2.5 py-1 rounded-full shrink-0" style={{ background: skill.color + "20", color: skill.color }}>
           {levelLabel}
         </span>
       </div>
-
       <div className="relative px-1">
         <input
           type="range" min={0} max={4} step={1} value={skill.value}
           onChange={e => onChange(skill.id, Number(e.target.value))}
           className="w-full h-2 rounded-full appearance-none cursor-pointer outline-none"
-          style={{
-            background: `linear-gradient(to right, ${skill.color} 0%, ${skill.color} ${pct}%, #1e293b ${pct}%, #1e293b 100%)`,
-          }}
+          style={{ background: `linear-gradient(to right, ${skill.color} 0%, ${skill.color} ${pct}%, #1e293b ${pct}%, #1e293b 100%)` }}
         />
         <div className="flex justify-between mt-1.5 px-0.5">
           {SKILL_LEVELS.map((lbl, i) => (
             <div key={i} className="flex flex-col items-center gap-0.5">
-              <div className={`w-0.5 h-1.5 rounded-full ${i <= skill.value ? "" : "bg-slate-700"}`}
-                style={{ background: i <= skill.value ? skill.color : undefined }} />
+              <div className="w-0.5 h-1.5 rounded-full" style={{ background: i <= skill.value ? skill.color : "#334155" }} />
               <span className="text-[9px] text-slate-600 hidden sm:block">{i === 0 ? "0" : i === 4 ? "Pro" : ""}</span>
             </div>
           ))}
@@ -173,7 +163,6 @@ function SkillSliderCard({ skill, onChange }: { skill: SkillRating; onChange: (i
   );
 }
 
-/* ─── Main Component ─────────────────────────────────────────── */
 export default function SkillTest() {
   const [, setLocation] = useLocation();
   const search = useSearch();
@@ -219,19 +208,21 @@ export default function SkillTest() {
   const avgSkillScore = Math.round((skills.reduce((acc, s) => acc + s.value, 0) / (skills.length * 4)) * 100);
   const ratedSkillsSummary = skills.map(s => `${s.label}: ${SKILL_LEVELS[s.value]}`).join(", ");
 
-  // ── FIX: 30 second loading timer ──
   const startLoading = () => {
     goPhase(3);
+    setMeterVals([0, 0, 0]);
+    setLoadingMsgIdx(0);
     let mi = 0;
     const msgInt = setInterval(() => {
       mi = (mi + 1) % LOADING_MSGS.length;
       setLoadingMsgIdx(mi);
     }, 1400);
     setTimeout(() => setMeterVals([85, 72, 90]), 300);
-    setTimeout(() => { clearInterval(msgInt); callAI(); }, 5500);
+    // Call AI immediately — don't wait 30 seconds!
+    callAI(msgInt);
   };
 
-  const callAI = async () => {
+  const callAI = async (msgInt?: ReturnType<typeof setInterval>) => {
     const prompt = `You are a career advisor for Pakistan. A user rated their skills on a scale of 0-4.
 
 User profile:
@@ -267,9 +258,12 @@ Respond ONLY with valid JSON (no markdown, no extra text):
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       const parsed = typeof data === "string" ? JSON.parse(data) : data;
+      if (msgInt) clearInterval(msgInt);
       setResult(parsed);
       queryClient.invalidateQueries({ queryKey: ["/api/skills"] });
+      goPhase(4);
     } catch {
+      if (msgInt) clearInterval(msgInt);
       const topSkills = [...skills].sort((a, b) => b.value - a.value).slice(0, 2).map(s => s.label);
       setResult({
         skill_level: avgSkillScore < 35 ? "Beginner" : avgSkillScore < 65 ? "Intermediate" : "Advanced",
@@ -284,7 +278,6 @@ Respond ONLY with valid JSON (no markdown, no extra text):
         learning_order: ["Step 1: Apni top skill polish karein", "Step 2: Portfolio ke 3 sample projects banayein", "Step 3: Fiverr/LinkedIn profile setup karein", "Step 4: Pehla gig/proposal submit karein"],
         motivation: "Aap ke paas skills hain — bas inhe duniya ko dikhane ka waqt aa gaya hai!",
       });
-    } finally {
       goPhase(4);
     }
   };
@@ -309,7 +302,6 @@ Respond ONLY with valid JSON (no markdown, no extra text):
 
   return (
     <div className="min-h-screen bg-[#0A0F1E] text-white">
-      {/* Header */}
       <header className="border-b border-slate-800/80 bg-[#0D1425]/90 backdrop-blur-sm sticky top-0 z-40">
         <div className="max-w-2xl mx-auto px-4 py-3.5 flex items-center gap-3">
           <Button size="icon" variant="ghost" onClick={() => setLocation("/dashboard")} className="text-slate-400 hover:text-white h-8 w-8">
@@ -317,7 +309,7 @@ Respond ONLY with valid JSON (no markdown, no extra text):
           </Button>
           <div className="flex-1">
             <h1 className="font-bold text-white text-sm">AI Career Assessment</h1>
-            <p className="text-slate-500 text-xs">Powered by Byonsoft AI</p>
+            <p className="text-slate-500 text-xs">Powered by Skilnex AI</p>
           </div>
           {phase.current > 0 && phase.current < 4 && (
             <div className="flex items-center gap-1.5">
@@ -331,7 +323,7 @@ Respond ONLY with valid JSON (no markdown, no extra text):
 
       <main className="max-w-2xl mx-auto px-4 py-6">
 
-        {/* ── PHASE 0: INTRO ── */}
+        {/* PHASE 0: INTRO */}
         {phase.current === 0 && (
           <div className="space-y-5 animate-in fade-in duration-500">
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900 p-6">
@@ -357,11 +349,11 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4">Aapko milega</p>
               <div className="space-y-3">
                 {[
-                  [Target,       "Skill Score + Level",     "Aapki current ability ka honest rating"],
-                  [TrendingUp,   "Career Paths",            "Aapke goal ke mutabiq top opportunities"],
-                  [BookOpen,     "Course Recommendations",  "Kahan se aur kya seekhna hai — ranked"],
-                  [DollarSign,   "Income Projection",       "Pakistan market mein realistic earning range"],
-                  [ListOrdered,  "Step-by-Step Plan",       "Kya seekhna hai, kis order mein"],
+                  [Target,      "Skill Score + Level",    "Aapki current ability ka honest rating"],
+                  [TrendingUp,  "Career Paths",           "Aapke goal ke mutabiq top opportunities"],
+                  [BookOpen,    "Course Recommendations", "Kahan se aur kya seekhna hai — ranked"],
+                  [DollarSign,  "Income Projection",      "Pakistan market mein realistic earning range"],
+                  [ListOrdered, "Step-by-Step Plan",      "Kya seekhna hai, kis order mein"],
                 ].map(([Icon, title, desc]) => (
                   <div key={title as string} className="flex items-start gap-3">
                     <div className="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center shrink-0">
@@ -383,7 +375,7 @@ Respond ONLY with valid JSON (no markdown, no extra text):
           </div>
         )}
 
-        {/* ── PHASE 1: BACKGROUND ── */}
+        {/* PHASE 1: BACKGROUND */}
         {phase.current === 1 && (
           <div className="space-y-4 animate-in fade-in duration-500">
             <div className="flex items-center gap-3 mb-6">
@@ -403,7 +395,7 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               <textarea
                 className="w-full bg-slate-800/60 border border-slate-700 rounded-xl text-white text-sm placeholder:text-slate-600 p-3 resize-none focus:outline-none focus:border-blue-500 transition-colors"
                 rows={3}
-                placeholder="e.g. Online earning seekhna hai, freelancing start karni hai, digital marketing mein career banana hai..."
+                placeholder="e.g. Online earning seekhna hai, freelancing start karni hai..."
                 value={goal}
                 onChange={e => setGoal(e.target.value)}
               />
@@ -418,7 +410,7 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               <textarea
                 className="w-full bg-slate-800/60 border border-slate-700 rounded-xl text-white text-sm placeholder:text-slate-600 p-3 resize-none focus:outline-none focus:border-blue-500 transition-colors"
                 rows={3}
-                placeholder="e.g. Student hoon, matriculation ki hai, koi job nahi, ya thoda freelance kiya hua hai..."
+                placeholder="e.g. Student hoon, matriculation ki hai, koi job nahi..."
                 value={existingSkill}
                 onChange={e => setExistingSkill(e.target.value)}
               />
@@ -450,7 +442,7 @@ Respond ONLY with valid JSON (no markdown, no extra text):
           </div>
         )}
 
-        {/* ── PHASE 2: SKILL SLIDERS ── */}
+        {/* PHASE 2: SKILL SLIDERS */}
         {phase.current === 2 && (
           <div className="space-y-4 animate-in fade-in duration-500">
             <div className="flex items-center gap-3 mb-2">
@@ -464,13 +456,11 @@ Respond ONLY with valid JSON (no markdown, no extra text):
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
               <h2 className="text-base font-bold text-white mb-1">Apni Skills Rate Karo</h2>
               <p className="text-xs text-slate-500 mb-4">Har skill par slider drag karo — bilkul honest raho, AI usi ke hisaab se plan banayega.</p>
-
               <div className="flex items-center gap-3 p-3 bg-slate-800/60 rounded-xl border border-slate-700/50">
                 <div className="flex-1">
                   <p className="text-xs text-slate-500 mb-1">Overall Skill Score</p>
                   <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full bg-blue-500 transition-all duration-500"
-                      style={{ width: `${avgSkillScore}%` }} />
+                    <div className="h-full rounded-full bg-blue-500 transition-all duration-500" style={{ width: `${avgSkillScore}%` }} />
                   </div>
                 </div>
                 <span className="text-xl font-black text-white w-12 text-right">{avgSkillScore}%</span>
@@ -495,7 +485,7 @@ Respond ONLY with valid JSON (no markdown, no extra text):
           </div>
         )}
 
-        {/* ── PHASE 3: LOADING ── */}
+        {/* PHASE 3: LOADING */}
         {phase.current === 3 && (
           <div className="flex flex-col items-center justify-center py-16 space-y-8">
             <div className="relative">
@@ -532,13 +522,13 @@ Respond ONLY with valid JSON (no markdown, no extra text):
           </div>
         )}
 
-        {/* ── PHASE 4: RESULTS ── */}
+        {/* PHASE 4: RESULTS */}
         {phase.current === 4 && result && (
           <div className="space-y-4 animate-in fade-in duration-500">
             <div className="flex items-center justify-between mb-2">
               <div>
                 <h2 className="text-xl font-black text-white">Aapka Career Report</h2>
-                <p className="text-slate-500 text-xs mt-0.5">Personalized by Byonsoft AI</p>
+                <p className="text-slate-500 text-xs mt-0.5">Personalized by Skilnex AI</p>
               </div>
               <button onClick={handleRetake} className="flex items-center gap-1.5 text-xs text-slate-400 border border-slate-700 rounded-lg px-3 py-2 hover:border-slate-500 transition-colors">
                 <RotateCcw className="w-3.5 h-3.5" /> Retake
@@ -559,9 +549,9 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                 <TrendingUp className="w-3.5 h-3.5" /> Skill Breakdown
               </p>
-              <ResultBar label="Technical Skills"   value={result.confidence_scores?.technical        ?? 50} color="#3b82f6" />
-              <ResultBar label="Career Mindset"     value={result.confidence_scores?.mindset          ?? 50} color="#22c55e" />
-              <ResultBar label="Market Awareness"   value={result.confidence_scores?.market_awareness ?? 50} color="#f59e0b" />
+              <ResultBar label="Technical Skills"  value={result.confidence_scores?.technical        ?? 50} color="#3b82f6" />
+              <ResultBar label="Career Mindset"    value={result.confidence_scores?.mindset          ?? 50} color="#22c55e" />
+              <ResultBar label="Market Awareness"  value={result.confidence_scores?.market_awareness ?? 50} color="#f59e0b" />
             </div>
 
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
@@ -647,7 +637,7 @@ Respond ONLY with valid JSON (no markdown, no extra text):
                 <ListOrdered className="w-3.5 h-3.5" /> Learning Order
               </p>
               <div className="space-y-3">
-                {(result.learning_order ?? []).map((step, i) => {
+                {(Array.isArray(result.learning_order) ? result.learning_order : [result.learning_order]).filter(Boolean).map((step, i) => {
                   const colors = ["#3b82f6", "#22c55e", "#f59e0b", "#a855f7"];
                   return (
                     <div key={i} className="flex items-start gap-3">
@@ -663,8 +653,8 @@ Respond ONLY with valid JSON (no markdown, no extra text):
             </div>
 
             <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl p-5 text-center">
-              <p className="text-white font-bold mb-1">Ready to start?</p>
-              <p className="text-blue-200 text-xs mb-4">Apne courses explore karo aur pehla qadam uthao</p>
+              <p className="text-white font-bold mb-1">Ready to start? 🚀</p>
+              <p className="text-blue-200 text-xs mb-4">Apne courses explore karo aur pehla qadam uthao!</p>
               <button onClick={() => setLocation("/dashboard")}
                 className="w-full bg-white text-blue-700 font-bold py-3 rounded-xl text-sm hover:bg-blue-50 transition-colors">
                 Dashboard par Jao →
@@ -673,7 +663,6 @@ Respond ONLY with valid JSON (no markdown, no extra text):
           </div>
         )}
 
-        {/* Phase 4 with no result fallback */}
         {phase.current === 4 && !result && (
           <div className="text-center py-16 space-y-4">
             <p className="text-slate-400">Kuch masla hua. Dobara try karo.</p>
