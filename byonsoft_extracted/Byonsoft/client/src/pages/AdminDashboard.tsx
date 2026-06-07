@@ -241,7 +241,7 @@ export default function AdminDashboard() {
 Respond ONLY with valid JSON (no markdown):
 {
   "category": "one of: Web Development, Digital Marketing, AI & Automation, Freelancing & Agency, Design & Creative Skills",
-  "description": "2-3 sentence course description in simple English/Roman Urdu mix",
+  "description": "Write a detailed 6-8 sentence course description in simple English/Roman Urdu mix. Cover: what students will learn, which tools/platforms they will use, who this course is for (beginners/intermediate), what income or career outcome is possible after completing this course, and mention that if any concept is unclear, students can ask the AI Mentor anytime for instant help.",
   "tags": "comma-separated tags like: freelancing, canva, graphic design, youtube"
 }`,
       });
