@@ -14,7 +14,6 @@ import {
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 export interface IStorage {
-  // Users
   getUser(id: number): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: Omit<InsertUser, "role" | "subscription_status">): Promise<User>;
@@ -22,53 +21,33 @@ export interface IStorage {
   updateUserRole(id: number, role: string): Promise<User>;
   updateUserSubscription(id: number, status: boolean): Promise<User>;
   deleteUser(id: number): Promise<void>;
-
-  // Courses
   getCourse(id: number): Promise<Course | undefined>;
   getAllCourses(): Promise<Course[]>;
   createCourse(course: InsertCourse): Promise<Course>;
   updateCourse(id: number, course: Partial<InsertCourse>): Promise<Course>;
   deleteCourse(id: number): Promise<void>;
-
-  // Lessons
   getLessonsForCourse(courseId: number): Promise<Lesson[]>;
   createLesson(lesson: InsertLesson): Promise<Lesson>;
   updateLesson(id: number, data: Partial<InsertLesson>): Promise<Lesson>;
   deleteLesson(id: number): Promise<void>;
-
-  // Payment Settings
   getAllPaymentSettings(): Promise<PaymentSetting[]>;
   updatePaymentSetting(id: number, data: Partial<InsertPaymentSetting>): Promise<PaymentSetting>;
   createPaymentSetting(data: InsertPaymentSetting): Promise<PaymentSetting>;
-
-  // Transactions
   createTransaction(tx: InsertTransaction, screenshot_url?: string): Promise<Transaction>;
   getAllTransactions(): Promise<(Transaction & { user_name: string; user_email: string; screenshot_url: string })[]>;
   getUserTransactions(userId: number): Promise<Transaction[]>;
   updateTransactionStatus(id: number, status: string): Promise<Transaction>;
-
-  // Skill Scores
   getSkillScore(userId: number): Promise<SkillScore | undefined>;
   upsertSkillScore(score: InsertSkillScore): Promise<SkillScore>;
-
-  // Progress
   getUserProgress(userId: number): Promise<Progress[]>;
   upsertProgress(p: InsertProgress): Promise<Progress>;
-
-  // Giveaway Stats
   getGiveawayStats(): Promise<{ activeUsers: number; nextMilestone: number; prevMilestone: number }>;
-
-  // Referral System
   getUserByReferralCode(code: string): Promise<User | undefined>;
   getReferralStats(userId: number): Promise<{ referral_code: string; successful_referrals: number; total_tickets: number }>;
   getReferralLeaderboard(): Promise<{ name: string; referral_count: number; rank: number }[]>;
-
-  // Career Analyses
   saveCareerAnalysis(data: { user_id: number; skill_path: string; secondary_path: string; personality_type: string; income_6m: string; income_12m: string; recommended_skills: string; roadmap: string; rarity: string }): Promise<CareerAnalysis>;
   getCareerAnalysisByShareId(shareId: string): Promise<CareerAnalysis | undefined>;
   getLatestCareerAnalysis(userId: number): Promise<CareerAnalysis | undefined>;
-
-  // Admin Referral Management
   getAllUsersWithReferralStats(): Promise<{
     id: number; name: string; email: string; referral_code: string;
     subscription_status: boolean; referred_by_name: string | null;
@@ -78,12 +57,8 @@ export interface IStorage {
   adjustUserReferralBonus(userId: number, bonus: number): Promise<void>;
   getReferralSettings(): Promise<{ referral_enabled: boolean; referral_reward_rules: string }>;
   updateReferralSettings(enabled: boolean, rules: string): Promise<void>;
-
-  // App Settings
   getSubscriptionPrice(): Promise<number>;
   updateSubscriptionPrice(price: number): Promise<number>;
-
-  // Coupons
   getCoupon(code: string): Promise<Coupon | undefined>;
   getAllCoupons(): Promise<Coupon[]>;
   createCoupon(coupon_code: string, custom_price: number, description: string): Promise<Coupon>;
@@ -182,9 +157,7 @@ export class PgStorage implements IStorage {
   async getLessonsForCourse(courseId: number): Promise<Lesson[]> {
     const r = await pool.query(
       `SELECT * FROM lessons WHERE course_id=$1
-       ORDER BY module_name ASC,
-         order_index ASC,
-         title ASC`,
+       ORDER BY module_name ASC, order_index ASC, title ASC`,
       [courseId]
     );
     return r.rows;
@@ -291,16 +264,25 @@ export class PgStorage implements IStorage {
     return r.rows;
   }
 
+  // ✅ FIXED: SELECT first, then INSERT or UPDATE — no UNIQUE constraint needed
   async upsertProgress(p: InsertProgress): Promise<Progress> {
-    const r = await pool.query(`
-      INSERT INTO progress (user_id, course_id, lessons_completed, is_completed)
-      VALUES ($1,$2,$3,$4)
-      ON CONFLICT (user_id, course_id) DO UPDATE SET
-        lessons_completed=EXCLUDED.lessons_completed,
-        is_completed=EXCLUDED.is_completed
-      RETURNING *
-    `, [p.user_id, p.course_id, p.lessons_completed, p.is_completed]);
-    return r.rows[0];
+    const existing = await pool.query(
+      "SELECT * FROM progress WHERE user_id=$1 AND course_id=$2",
+      [p.user_id, p.course_id]
+    );
+    if (existing.rows.length > 0) {
+      const r = await pool.query(
+        "UPDATE progress SET lessons_completed=$1, is_completed=$2 WHERE user_id=$3 AND course_id=$4 RETURNING *",
+        [p.lessons_completed, p.is_completed, p.user_id, p.course_id]
+      );
+      return r.rows[0];
+    } else {
+      const r = await pool.query(
+        "INSERT INTO progress (user_id, course_id, lessons_completed, is_completed) VALUES ($1,$2,$3,$4) RETURNING *",
+        [p.user_id, p.course_id, p.lessons_completed, p.is_completed]
+      );
+      return r.rows[0];
+    }
   }
 
   async getGiveawayStats(): Promise<{ activeUsers: number; nextMilestone: number; prevMilestone: number }> {
@@ -325,17 +307,14 @@ export class PgStorage implements IStorage {
     const user = userRow.rows[0];
     const referral_code = user?.referral_code ?? "";
     const isPremium = user?.subscription_status === true;
-
     const refRow = await pool.query(
       "SELECT COUNT(*) FROM users WHERE referred_by=$1 AND subscription_status=true",
       [userId]
     );
     const successful_referrals = parseInt(refRow.rows[0].count, 10);
-
     const base_tickets = isPremium ? 1 : 0;
     const extra_tickets = Math.floor(successful_referrals / 2);
     const total_tickets = base_tickets + extra_tickets;
-
     return { referral_code, successful_referrals, total_tickets };
   }
 
