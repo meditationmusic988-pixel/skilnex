@@ -739,7 +739,7 @@ Output ONLY this exact JSON structure (no markdown, no text before or after the 
   });
 
   // ─── GOOGLE DRIVE BULK IMPORT ──────────────────────────────────────────────
-  aapp.get("/api/admin/drive/import", authMiddleware, adminMiddleware, async (req, res) => {
+  app.get("/api/admin/drive/import", authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const folderUrl = req.query.folderUrl as string;
     if (!folderUrl) return res.status(400).json({ error: "folderUrl is required" });
