@@ -233,18 +233,32 @@ export default function AdminDashboard() {
 
     try {
       // Step 1: AI generate course details
-      try {
+    const aiRes = await apiRequest("POST", "/api/admin/bulk-import/generate-meta", {
+  title: bulk.courseTitle.trim(),
+});
+const aiData = await aiRes.json();
+if (!aiRes.ok) throw new Error(aiData.error || "AI generation failed");
+const parsed = {
+  category: aiData.category || "Freelancing & Agency",
+  description: aiData.description || `${bulk.courseTitle} course.`,
+  tags: aiData.tags || "",
+};
   // Step 1: AI generate course meta
-  const aiRes = await apiRequest("POST", "/api/admin/bulk-import/generate-meta", {
-    title: bulk.courseTitle.trim(),
-  });
-  const aiData = await aiRes.json();
-  if (!aiRes.ok) throw new Error(aiData.error || "AI generation failed");
-  const parsed = {
-    category: aiData.category || "Freelancing & Agency",
-    description: aiData.description || `${bulk.courseTitle} course.`,
-    tags: aiData.tags || "",
-  };
+  try {
+      // Step 1: AI generate course meta
+      const aiRes = await apiRequest("POST", "/api/admin/bulk-import/generate-meta", {
+        title: bulk.courseTitle.trim(),
+      });
+      const aiData = await aiRes.json();
+      if (!aiRes.ok) throw new Error(aiData.error || "AI generation failed");
+      const parsed = {
+        category: aiData.category || "Freelancing & Agency",
+        description: aiData.description || `${bulk.courseTitle} course.`,
+        tags: aiData.tags || "",
+      };
+
+      updateBulk({
+        generatedCategory: parsed.category ...
 
       updateBulk({
         generatedCategory: parsed.category || "Freelancing & Agency",
