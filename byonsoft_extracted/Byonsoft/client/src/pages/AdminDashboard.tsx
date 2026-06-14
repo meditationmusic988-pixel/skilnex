@@ -233,19 +233,16 @@ export default function AdminDashboard() {
 
     try {
       // Step 1: AI generate course details
-      const aiRes = await apiRequest("POST", "/api/ai/roadmap", {
-        goal: `Generate course metadata for: "${bulk.courseTitle}"`,
-        existing_skill: "admin creating course",
-        available_tool: "web",
-        prompt_override: `You are a course catalog AI. Generate metadata for this course title: "${bulk.courseTitle}"
-
-Respond ONLY with valid JSON (no markdown):
-{
-  "category": "one of: Web Development, Digital Marketing, AI & Automation, Freelancing & Agency, Design & Creative Skills",
-  "description": "Write a detailed 6-8 sentence course description in simple English/Roman Urdu mix. Cover: what students will learn, which tools/platforms they will use, who this course is for (beginners/intermediate), what income or career outcome is possible after completing this course, and mention that if any concept is unclear, students can ask the AI Mentor anytime for instant help.",
-  "tags": "comma-separated tags like: freelancing, canva, graphic design, youtube"
-}`,
-      });
+      const aiRes = await apiRequest("POST", "/api/admin/bulk-import/generate-meta", {
+  title: bulk.courseTitle.trim(),
+});
+const aiData = await aiRes.json();
+if (!aiRes.ok) throw new Error(aiData.error || "AI generation failed");
+const parsed = {
+  category: aiData.category || "Freelancing & Agency",
+  description: aiData.description || `${bulk.courseTitle} course.`,
+  tags: aiData.tags || "",
+};
       const aiData = await aiRes.json();
       let parsed: any = {};
       try {
