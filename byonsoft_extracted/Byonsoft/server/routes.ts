@@ -740,76 +740,88 @@ Output ONLY this exact JSON structure (no markdown, no text before or after the 
 
   // ─── GOOGLE DRIVE BULK IMPORT ──────────────────────────────────────────────
   app.get("/api/admin/drive/import", authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    const folderUrl = req.query.folderUrl as string;
-    if (!folderUrl) return res.status(400).json({ error: "folderUrl is required" });
-
-    let folderId: string | null = null;
     try {
-      const parsed = new URL(folderUrl);
-      const parts = parsed.pathname.split("/");
-      const idx = parts.indexOf("folders");
-      if (idx !== -1 && parts[idx + 1]) {
-        folderId = parts[idx + 1];
-      } else if (parsed.searchParams.get("id")) {
-        folderId = parsed.searchParams.get("id");
-      }
-    } catch {
-      folderId = folderUrl.trim();
-    }
+      const folderUrl = req.query.folderUrl as string;
+      if (!folderUrl) return res.status(400).json({ error: "folderUrl is required" });
 
-    if (!folderId) return res.status(400).json({ error: "Could not extract folder ID" });
-
-    const apiKey = process.env.GOOGLE_DRIVE_API_KEY;
-    if (!apiKey) return res.status(500).json({ error: "GOOGLE_DRIVE_API_KEY not configured" });
-
-    // Recursive function to fetch all files from folder + sub-folders
-    async function fetchAllFiles(parentId: string, moduleName: string = ""): Promise<{title: string, video_url: string, module_name: string}[]> {
-      const query = encodeURIComponent(`'${parentId}' in parents and trashed=false`);
-      const fields = encodeURIComponent("files(id,name,mimeType)");
-      const driveRes = await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=${query}&fields=${fields}&orderBy=name&pageSize=1000&key=${encodeURIComponent(apiKey)}`
-      );
-      if (!driveRes.ok) {
-        const errBody: any = await driveRes.json();
-        throw new Error(errBody?.error?.message || "Google Drive API error");
-      }
-      const driveData: { files: { id: string; name: string; mimeType: string }[] } = await driveRes.json();
-      const files = driveData.files || [];
-
-      let results: {title: string, video_url: string, module_name: string}[] = [];
-
-      for (const f of files) {
-        if (f.mimeType === "application/vnd.google-apps.folder") {
-          // Sub-folder milا — recursively fetch karo, folder name = module name
-          const subFiles = await fetchAllFiles(f.id, f.name);
-          results = results.concat(subFiles);
-        } else if (
-          f.mimeType.includes("video") ||
-          f.mimeType === "application/octet-stream" ||
-          f.name.match(/\.(mp4|mkv|avi|mov|webm|flv)$/i)
-        ) {
-          // Video file
-          results.push({
-            title: f.name.replace(/\.[^/.]+$/, ""),
-            video_url: `https://drive.google.com/file/d/${f.id}/preview`,
-            module_name: moduleName,
-          });
+      let folderId: string | null = null;
+      try {
+        const parsed = new URL(folderUrl);
+        const parts = parsed.pathname.split("/");
+        const idx = parts.indexOf("folders");
+        if (idx !== -1 && parts[idx + 1]) {
+          folderId = parts[idx + 1];
+        } else if (parsed.searchParams.get("id")) {
+          folderId = parsed.searchParams.get("id");
         }
+      } catch {
+        folderId = folderUrl.trim();
       }
 
-      return results.sort((a, b) =>
-        a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: "base" })
-      );
+      if (!folderId) return res.status(400).json({ error: "Could not extract folder ID" });
+
+      const apiKey = process.env.GOOGLE_DRIVE_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "GOOGLE_DRIVE_API_KEY not configured" });
+
+      // Recursive function to fetch all files from folder + sub-folders
+      // IMPORTANT: Each folder's files are sorted internally (by Drive API orderBy=name),
+      // but the overall order across modules is preserved by folder traversal order
+      // (no global re-sort, so Module 1's videos stay together before Module 2's videos).
+      async function fetchAllFiles(parentId: string, moduleName: string = ""): Promise<{title: string, video_url: string, module_name: string}[]> {
+        const query = encodeURIComponent(`'${parentId}' in parents and trashed=false`);
+        const fields = encodeURIComponent("files(id,name,mimeType)");
+        const driveRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files?q=${query}&fields=${fields}&orderBy=folder,name&pageSize=1000&key=${encodeURIComponent(apiKey)}`
+        );
+        if (!driveRes.ok) {
+          const errBody: any = await driveRes.json();
+          throw new Error(errBody?.error?.message || "Google Drive API error");
+        }
+        const driveData: { files: { id: string; name: string; mimeType: string }[] } = await driveRes.json();
+        const files = driveData.files || [];
+
+        // Separate folders and video files at this level
+        const subFolders = files.filter(f => f.mimeType === "application/vnd.google-apps.folder");
+        const videoFiles = files.filter(f =>
+          f.mimeType !== "application/vnd.google-apps.folder" && (
+            f.mimeType.includes("video") ||
+            f.mimeType === "application/octet-stream" ||
+            f.name.match(/\.(mp4|mkv|avi|mov|webm|flv)$/i)
+          )
+        );
+
+        // Sort videos within this folder by name (numeric-aware)
+        videoFiles.sort((a, b) =>
+          a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
+        );
+
+        let results: {title: string, video_url: string, module_name: string}[] = videoFiles.map(f => ({
+          title: f.name.replace(/\.[^/.]+$/, ""),
+          video_url: `https://drive.google.com/file/d/${f.id}/preview`,
+          module_name: moduleName,
+        }));
+
+        // Sort sub-folders by name (numeric-aware) so Module 1 comes before Module 2, etc.
+        subFolders.sort((a, b) =>
+          a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
+        );
+
+        // Process each sub-folder in order, appending its videos as its own module group
+        for (const folder of subFolders) {
+          const subFiles = await fetchAllFiles(folder.id, folder.name);
+          results = results.concat(subFiles);
+        }
+
+        return results;
+      }
+
+      const lessons = await fetchAllFiles(folderId);
+      return res.json({ lessons });
+
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
     }
-
-    const lessons = await fetchAllFiles(folderId);
-    return res.json({ lessons });
-
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
-  }
-});
+  });
 
   // ─── APP SETTINGS / PRICING ────────────────────────────────────────────────
   app.get("/api/settings/price", async (_req, res) => {
