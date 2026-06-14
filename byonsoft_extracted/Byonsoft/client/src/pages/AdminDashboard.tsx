@@ -37,6 +37,7 @@ interface TxWithUser {
   user_name: string; user_email: string; screenshot_url: string;
 }
 
+// ── FIX 1: module_name added to fetchedLessons ──
 interface BulkImportState {
   courseTitle: string;
   driveFolderUrl: string;
@@ -44,7 +45,7 @@ interface BulkImportState {
   generatedCategory: string;
   generatedDescription: string;
   generatedTags: string;
-  fetchedLessons: { title: string; video_url: string }[];
+  fetchedLessons: { title: string; video_url: string; module_name: string }[];
   step: "idle" | "generating" | "fetching" | "preview" | "importing" | "done";
   error: string;
 }
@@ -217,7 +218,7 @@ export default function AdminDashboard() {
 
   const pendingTx = transactions.filter((t) => t.status === "pending");
 
-  // ── Bulk Import Functions ──
+  // ── FIX 2 & 3: Bulk Import — module_name from subfolder preserved ──
   const handleBulkGenerate = async () => {
     if (!bulk.courseTitle.trim()) {
       toast({ title: "Course title required", variant: "destructive" });
@@ -264,12 +265,13 @@ Respond ONLY with valid JSON (no markdown):
         step: "fetching",
       });
 
-      // Step 2: Fetch Drive lessons
+      // Step 2: Fetch Drive lessons — module_name from subfolder
       const driveRes = await apiRequest("GET", `/api/admin/drive/import?folderUrl=${encodeURIComponent(bulk.driveFolderUrl.trim())}`);
       const driveData = await driveRes.json();
       if (!driveRes.ok) throw new Error(driveData.error || "Drive fetch failed");
 
-      const lessons = (driveData.lessons as { title: string; video_url: string }[]) || [];
+      // FIX: module_name field preserve karo (subfolder name)
+      const lessons = (driveData.lessons as { title: string; video_url: string; module_name: string }[]) || [];
 
       updateBulk({
         fetchedLessons: lessons,
@@ -300,13 +302,12 @@ Respond ONLY with valid JSON (no markdown):
       });
       const newCourse = await courseRes.json();
 
-      // Add lessons
-      const moduleName = bulk.moduleName.trim() || "Module 1";
+      // FIX: har lesson ki apni module_name use karo (subfolder se)
       for (let i = 0; i < bulk.fetchedLessons.length; i++) {
         await apiRequest("POST", `/api/admin/courses/${newCourse.id}/lessons`, {
           title: bulk.fetchedLessons[i].title,
           video_url: bulk.fetchedLessons[i].video_url,
-          module_name: moduleName,
+          module_name: bulk.fetchedLessons[i].module_name || bulk.moduleName.trim() || "Module 1",
           order_index: i,
         });
       }
@@ -362,7 +363,12 @@ Respond ONLY with valid JSON (no markdown):
   const saveCourse = useMutation({
     mutationFn: async () => {
       if (editCourse) {
-        const res = await apiRequest("PATCH", `/api/admin/courses/${editCourse.id}`, {   title: courseForm.title,   category: courseForm.category,   description: courseForm.description,   tags: courseForm.tags, });
+        const res = await apiRequest("PATCH", `/api/admin/courses/${editCourse.id}`, {
+          title: courseForm.title,
+          category: courseForm.category,
+          description: courseForm.description,
+          tags: courseForm.tags,
+        });
         return res.json();
       } else {
         const res = await apiRequest("POST", "/api/admin/courses", courseForm);
@@ -420,7 +426,10 @@ Respond ONLY with valid JSON (no markdown):
       const res = await apiRequest("GET", `/api/admin/drive/import?folderUrl=${encodeURIComponent(driveUrl.trim())}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to fetch from Google Drive");
-      const drafts = (data.lessons as { title: string; video_url: string }[]).map((l) => ({ ...l, module_name: driveModuleName.trim() }));
+      const drafts = (data.lessons as { title: string; video_url: string; module_name: string }[]).map((l) => ({
+        ...l,
+        module_name: l.module_name || driveModuleName.trim(),
+      }));
       setDriveDrafts(drafts);
       if (drafts.length === 0) toast({ title: "No files found" });
     } catch (err: any) {
@@ -498,7 +507,7 @@ Respond ONLY with valid JSON (no markdown):
 
   const openLessonManager = (c: Course) => {
     setLessonCourse(c); setEditLesson(null);
-    setLessonForm({ title: "", video_url: "" });
+    setLessonForm({ title: "", video_url: "", module_name: "" });
     setLessonDialog(true);
   };
 
@@ -754,7 +763,7 @@ Respond ONLY with valid JSON (no markdown):
                       <h2 className="text-white font-bold text-lg mb-1">AI Bulk Course Import</h2>
                       <p className="text-slate-400 text-sm">Course title likho + Drive folder link do → AI sab kuch automatically generate karega!</p>
                       <div className="flex flex-wrap gap-2 mt-3">
-                        {["AI Category Generate", "AI Description", "AI Tags", "Auto Lessons", "Ek Click Save"].map(f => (
+                        {["AI Category Generate", "AI Description", "AI Tags", "Auto Chapters", "Auto Lessons", "Ek Click Save"].map(f => (
                           <span key={f} className="text-xs bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 px-2 py-1 rounded-full">{f}</span>
                         ))}
                       </div>
@@ -792,13 +801,19 @@ Respond ONLY with valid JSON (no markdown):
                         onChange={e => updateBulk({ driveFolderUrl: e.target.value })}
                         disabled={bulk.step !== "idle"}
                       />
-                      <p className="text-slate-500 text-xs mt-1">Folder public honi chahiye — Share → Anyone with link → Viewer</p>
+                      <p className="text-slate-500 text-xs mt-1">
+                        Folder public honi chahiye — Share → Anyone with link → Viewer
+                        <span className="text-blue-400 ml-2">• Subfolders = Auto Chapters ban jayenge</span>
+                      </p>
                     </div>
                     <div>
-                      <Label className="text-slate-300 mb-2 block">Module Name</Label>
+                      <Label className="text-slate-300 mb-2 block">
+                        Default Module Name
+                        <span className="text-slate-500 text-xs ml-2">(sirf tab use hoga jab subfolders na hon)</span>
+                      </Label>
                       <Input
                         className="bg-slate-700 border-slate-600 text-white"
-                        placeholder="e.g. Section 1: Introduction"
+                        placeholder="e.g. Module 1 (subfolders hain to auto set ho ga)"
                         value={bulk.moduleName}
                         onChange={e => updateBulk({ moduleName: e.target.value })}
                         disabled={bulk.step !== "idle"}
@@ -860,32 +875,63 @@ Respond ONLY with valid JSON (no markdown):
                     </CardContent>
                   </Card>
 
-                  {/* Lessons Preview */}
+                  {/* ── FIX 4: Lessons grouped by Chapter/Module ── */}
                   <Card className="bg-slate-800/60 border-slate-700">
                     <CardHeader>
                       <CardTitle className="text-white text-base flex items-center gap-2">
                         <BookOpen className="w-5 h-5 text-purple-400" />
-                        {bulk.fetchedLessons.length} Lessons Found
-                        <span className="text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full ml-auto font-normal">
-                          Module: {bulk.moduleName || "Module 1"}
+                        {bulk.fetchedLessons.length} Lessons —&nbsp;
+                        <span className="text-slate-400 font-normal text-sm">
+                          {Array.from(new Set(bulk.fetchedLessons.map(l => l.module_name))).length} Chapters
                         </span>
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                        {bulk.fetchedLessons.map((lesson, i) => (
-                          <div key={i} className="flex items-center gap-3 p-2.5 bg-slate-700/40 border border-slate-600 rounded-lg">
-                            <span className="text-slate-500 text-xs w-5 text-right shrink-0">{i + 1}</span>
-                            <Input
-                              className="bg-transparent border-none text-white text-sm h-7 p-0 focus:ring-0 flex-1"
-                              value={lesson.title}
-                              onChange={e => updateBulk({ fetchedLessons: bulk.fetchedLessons.map((l, j) => j === i ? { ...l, title: e.target.value } : l) })}
-                            />
-                            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-red-400 shrink-0" onClick={() => updateBulk({ fetchedLessons: bulk.fetchedLessons.filter((_, j) => j !== i) })}>
-                              <X className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        ))}
+                      <div className="space-y-5 max-h-96 overflow-y-auto pr-1">
+                        {/* Group lessons by module_name (chapter) */}
+                        {Array.from(new Set(bulk.fetchedLessons.map(l => l.module_name))).map((chapterName, chIdx) => {
+                          const chapterLessons = bulk.fetchedLessons
+                            .map((l, i) => ({ ...l, origIdx: i }))
+                            .filter(l => l.module_name === chapterName);
+                          return (
+                            <div key={chIdx}>
+                              {/* Chapter header */}
+                              <div className="flex items-center gap-2 mb-2 pb-1 border-b border-slate-700">
+                                <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center font-bold shrink-0">
+                                  {chIdx + 1}
+                                </span>
+                                <span className="text-blue-300 text-sm font-semibold flex-1">{chapterName}</span>
+                                <span className="text-slate-500 text-xs">{chapterLessons.length} lessons</span>
+                              </div>
+                              {/* Lessons in this chapter */}
+                              <div className="space-y-1.5 ml-8">
+                                {chapterLessons.map((lesson, li) => (
+                                  <div key={lesson.origIdx} className="flex items-center gap-2 p-2 bg-slate-700/40 border border-slate-600 rounded-lg">
+                                    <span className="text-slate-500 text-xs w-4 shrink-0">{li + 1}</span>
+                                    <Input
+                                      className="bg-transparent border-none text-white text-sm h-7 p-0 focus:ring-0 flex-1"
+                                      value={lesson.title}
+                                      onChange={e => updateBulk({
+                                        fetchedLessons: bulk.fetchedLessons.map((l, j) =>
+                                          j === lesson.origIdx ? { ...l, title: e.target.value } : l
+                                        )
+                                      })}
+                                    />
+                                    <Button
+                                      size="sm" variant="ghost"
+                                      className="h-6 w-6 p-0 text-red-400 shrink-0"
+                                      onClick={() => updateBulk({
+                                        fetchedLessons: bulk.fetchedLessons.filter((_, j) => j !== lesson.origIdx)
+                                      })}
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </Button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </CardContent>
                   </Card>
