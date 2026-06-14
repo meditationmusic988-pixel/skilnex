@@ -1189,7 +1189,33 @@ Respond ONLY with valid JSON (no markdown):
           <div className="space-y-4">
             <div><Label className="text-slate-300 mb-1">Title</Label><Input className="bg-slate-700 border-slate-600 text-white" value={courseForm.title} onChange={(e) => setCourseForm({ ...courseForm, title: e.target.value })} placeholder="Course title" /></div>
             <div><Label className="text-slate-300 mb-1">Category</Label><Input className="bg-slate-700 border-slate-600 text-white" value={courseForm.category} onChange={(e) => setCourseForm({ ...courseForm, category: e.target.value })} placeholder="e.g. Programming, Design" /></div>
-            <div><Label className="text-slate-300 mb-1">Description</Label><Textarea className="bg-slate-700 border-slate-600 text-white resize-none" rows={3} value={courseForm.description} onChange={(e) => setCourseForm({ ...courseForm, description: e.target.value })} placeholder="Describe the course..." /></div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <Label className="text-slate-300">Description</Label>
+                {editCourse && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        setCourseForm(prev => ({ ...prev, description: "⏳ AI likh raha hai..." }));
+                        const res = await apiRequest("POST", `/api/admin/courses/${editCourse.id}/generate-description`, {});
+                        const data = await res.json();
+                        if (data.error) throw new Error(data.error);
+                        setCourseForm(prev => ({ ...prev, description: data.description }));
+                        toast({ title: "✨ Description generated!" });
+                      } catch (err: any) {
+                        toast({ title: "Failed", description: err.message, variant: "destructive" });
+                        setCourseForm(prev => ({ ...prev, description: "" }));
+                      }
+                    }}
+                    className="flex items-center gap-1.5 text-xs bg-purple-600/20 hover:bg-purple-600/40 border border-purple-500/30 text-purple-300 px-2.5 py-1 rounded-lg transition-all font-medium"
+                  >
+                    <Brain className="w-3 h-3" />
+                    ✨ Auto Generate
+                  </button>
+                )}
+              </div>
+              <Textarea className="bg-slate-700 border-slate-600 text-white resize-none" rows={4} value={courseForm.description} onChange={(e) => setCourseForm({ ...courseForm, description: e.target.value })} placeholder="Describe the course..." />
+            </div>
             <div><Label className="text-slate-300 mb-1">Tags</Label><Input className="bg-slate-700 border-slate-600 text-white" value={courseForm.tags} onChange={(e) => setCourseForm({ ...courseForm, tags: e.target.value })} placeholder="e.g. SEO, Freelancing" /></div>
           </div>
           <DialogFooter>
