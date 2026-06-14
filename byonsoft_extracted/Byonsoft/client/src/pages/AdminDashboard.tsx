@@ -362,7 +362,7 @@ Respond ONLY with valid JSON (no markdown):
   const saveCourse = useMutation({
     mutationFn: async () => {
       if (editCourse) {
-        const res = await apiRequest("PATCH", `/api/admin/courses/${editCourse.id}`, courseForm);
+        const res = await apiRequest("PATCH", `/api/admin/courses/${editCourse.id}`, {   title: courseForm.title,   category: courseForm.category,   description: courseForm.description,   tags: courseForm.tags, });
         return res.json();
       } else {
         const res = await apiRequest("POST", "/api/admin/courses", courseForm);
