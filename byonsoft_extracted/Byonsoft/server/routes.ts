@@ -362,6 +362,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+ app.patch("/api/admin/courses/:id", authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+      const { title, category, description, tags } = req.body;
+      const course = await storage.updateCourse(Number(req.params.id), { title, category, description, tags });
+      return res.json(course);
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+  
   app.delete("/api/admin/users/:id", authMiddleware, adminMiddleware, async (req, res) => {
     try {
       await storage.deleteUser(Number(req.params.id));
