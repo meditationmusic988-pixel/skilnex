@@ -389,15 +389,45 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.patch("/api/admin/courses/:id", authMiddleware, adminMiddleware, async (req, res) => {
+  app.post("/api/admin/courses/:id/generate-description", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const course = await storage.getCourse(Number(req.params.id));
+    if (!course) return res.status(404).json({ error: "Course not found" });
+
+    const lessons = await storage.getLessonsForCourse(Number(req.params.id));
+    const lessonList = lessons.map((l, i) => `${i + 1}. ${l.title}`).join("\n");
+
+    const prompt = `Tum ek expert course marketing copywriter ho. Diye gaye course title aur lesson titles ke basis par ek detailed, engaging course description likho.
+
+Course Title: ${course.title}
+Category: ${course.category}
+Lessons:
+${lessonList}
+
+Description mein ye sab shamil ho:
+1. Ek strong hook line jo student ka attention pakray
+2. "Aap kya seekhenge" - har lesson ka topic cover karte hue 4-6 bullet points
+3. Ye course kis ke liye hai (target audience)
+4. Practical/hands-on approach ka zikar
+5. Last mein ye line zaroor add karo: "AI Mentor aapke saath hai - agar koi topic samajh na aaye to kisi bhi waqt pooch sakte hain."
+
+Description kam az kam 100-150 words ki ho, Roman Urdu aur English mix mein, motivating tone ke saath. Sirf description return karo, kuch aur text nahi.`;
+
+    let description = "";
     try {
-      const { title, category, description, tags } = req.body;
-      const course = await storage.updateCourse(Number(req.params.id), { title, category, description, tags: tags ?? "" });
-      return res.json(course);
-    } catch (err: any) {
-      return res.status(500).json({ error: err.message });
+      description = await groqChat([
+        { role: "user", content: prompt },
+      ], { max_tokens: 1024 });
+    } catch (aiErr: any) {
+      return res.status(503).json({ error: "AI service temporarily unavailable. Thodi der baad try karein." });
     }
-  });
+
+    description = description.trim();
+    return res.json({ description });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
 
   app.delete("/api/admin/courses/:id", authMiddleware, adminMiddleware, async (req, res) => {
     try {
