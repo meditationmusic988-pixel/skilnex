@@ -31,11 +31,12 @@ function adminMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
 
-  // ─── AUTH ─────────────────────────────────────────────────────────────────
+  // ─── AUTH ──────────────────────────────────────────────────────────────────
   app.post("/api/auth/signup", async (req, res) => {
     try {
       const { name, email, password, ref, whatsapp_number } = req.body;
-      if (!name || !email || !password || !whatsapp_number) return res.status(400).json({ error: "All fields required including WhatsApp number" });
+      if (!name || !email || !password || !whatsapp_number)
+        return res.status(400).json({ error: "All fields required including WhatsApp number" });
       const existing = await storage.getUserByEmail(email);
       if (existing) return res.status(400).json({ error: "Email already registered" });
 
@@ -48,7 +49,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const password_hash = await bcrypt.hash(password, 10);
       const user = await storage.createUser({ name, email, password_hash, referred_by, whatsapp_number });
       const token = jwt.sign({ id: user.id, role: user.role, email: user.email }, JWT_SECRET, { expiresIn: "7d" });
-      return res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, subscription_status: user.subscription_status, referral_code: user.referral_code ?? null, whatsapp_number: user.whatsapp_number ?? null } });
+      return res.json({
+        token,
+        user: {
+          id: user.id, name: user.name, email: user.email, role: user.role,
+          subscription_status: user.subscription_status,
+          referral_code: user.referral_code ?? null,
+          whatsapp_number: user.whatsapp_number ?? null,
+        },
+      });
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }
@@ -73,10 +82,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const user = await storage.getUser(req.user!.id);
     if (!user) return res.status(404).json({ error: "User not found" });
     return res.json({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
+      id: user.id, name: user.name, email: user.email, role: user.role,
       subscription_status: user.subscription_status,
       subscription_expiry_date: user.subscription_expiry_date ?? null,
       referral_code: user.referral_code ?? null,
@@ -155,11 +161,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // ─── COURSES (public list) ─────────────────────────────────────────────────
+  // ─── COURSES (public) ──────────────────────────────────────────────────────
   app.get("/api/courses", async (_req, res) => {
     try {
-      const courses = await storage.getAllCourses();
-      return res.json(courses);
+      return res.json(await storage.getAllCourses());
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }
@@ -209,8 +214,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ─── PROGRESS ──────────────────────────────────────────────────────────────
   app.get("/api/progress", authMiddleware, async (req: AuthRequest, res) => {
     try {
-      const prog = await storage.getUserProgress(req.user!.id);
-      return res.json(prog);
+      return res.json(await storage.getUserProgress(req.user!.id));
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }
@@ -235,12 +239,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/ai/roadmap", authMiddleware, async (req: AuthRequest, res) => {
     try {
       const { goal, existing_skill, available_tool } = req.body;
-      if (!goal || goal.trim().length < 3) {
+      if (!goal || goal.trim().length < 3)
         return res.status(400).json({ error: "Please describe your primary goal." });
-      }
 
       const userMessage = `Primary Goal: ${(goal || "").trim()}\nExisting Skill: ${(existing_skill || "None").trim()}\nAvailable Tool/Device: ${(available_tool || "Mobile").trim()}`;
-
       const existingScore = await storage.getSkillScore(req.user!.id);
 
       let raw = "";
@@ -254,15 +256,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.status(503).json({ error: "AI service temporarily unavailable. Please try again shortly." });
       }
 
-      const cleaned = raw
-        .replace(/```json\s*/gi, "")
-        .replace(/```\s*/gi, "")
-        .trim();
-
+      const cleaned = raw.replace(/```json\s*/gi, "").replace(/```\s*/gi, "").trim();
       const jsonStart = cleaned.indexOf("{");
       const jsonEnd = cleaned.lastIndexOf("}");
       if (jsonStart === -1 || jsonEnd === -1) {
-        console.error("[roadmap] No JSON object found in AI response:", raw.slice(0, 300));
+        console.error("[roadmap] No JSON found in AI response:", raw.slice(0, 300));
         return res.status(500).json({ error: "AI response parse error. Please try again." });
       }
 
@@ -274,7 +272,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           expected_income: typeof parsed.expected_income === "string" ? parsed.expected_income : "",
           learning_order: typeof parsed.learning_order === "string" ? parsed.learning_order : "",
         };
-
         await storage.upsertSkillScore({
           user_id: req.user!.id,
           technical: existingScore?.technical ?? 0,
@@ -286,14 +283,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           available_tool: (available_tool || "").trim(),
           roadmap_result: JSON.stringify(result),
         });
-
         return res.json(result);
       } catch (parseErr) {
-        console.error("[roadmap] JSON.parse failed:", (parseErr as Error).message, "| raw:", raw.slice(0, 300));
+        console.error("[roadmap] JSON.parse failed:", (parseErr as Error).message);
         return res.status(500).json({ error: "AI response parse error. Please try again." });
       }
     } catch (err: any) {
-      console.error("[roadmap] Unexpected error:", err?.message || err);
       return res.status(500).json({ error: err.message });
     }
   });
@@ -318,23 +313,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       try {
         text = await groqChat([
           { role: "system", content: BYONSOFT_JSON_SYSTEM_PROMPT },
-          { role: "user", content: `Student ki weekly activity: ${activity}\n\nOutput ONLY this JSON structure (no markdown, no extra text):\n{\n  "strengths": "kya acha kar raha hai (Roman Urdu)",\n  "improvements": "kya improve karna hai (Roman Urdu)",\n  "next_week_plan": "aglay hafte ka specific plan (Roman Urdu)",\n  "pitch": "use the exact pitch value from your system instructions"\n}` },
+          { role: "user", content: `Student ki weekly activity: ${activity}\n\nOutput ONLY this JSON (no markdown):\n{\n  "strengths": "...",\n  "improvements": "...",\n  "next_week_plan": "...",\n  "pitch": "use the exact pitch value from your system instructions"\n}` },
         ]);
-      } catch (aiErr: any) {
-        return res.status(503).json({ error: "AI service temporarily unavailable. Thodi der baad try karein." });
+      } catch {
+        return res.status(503).json({ error: "AI service temporarily unavailable." });
       }
       try {
         const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
         return res.json(JSON.parse(cleaned));
       } catch {
-        return res.status(500).json({ error: "AI response parse error. Please try again." });
+        return res.status(500).json({ error: "AI response parse error." });
       }
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }
   });
 
-  // ─── ADMIN ROUTES ──────────────────────────────────────────────────────────
+  // ─── ADMIN: USERS ──────────────────────────────────────────────────────────
   app.get("/api/admin/users", authMiddleware, adminMiddleware, async (_req, res) => {
     try {
       const users = await storage.getAllUsers();
@@ -362,16 +357,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
- app.patch("/api/admin/courses/:id", authMiddleware, adminMiddleware, async (req, res) => {
-    try {
-      const { title, category, description, tags } = req.body;
-      const course = await storage.updateCourse(Number(req.params.id), { title, category, description, tags });
-      return res.json(course);
-    } catch (err: any) {
-      return res.status(500).json({ error: err.message });
-    }
-  });
-  
   app.delete("/api/admin/users/:id", authMiddleware, adminMiddleware, async (req, res) => {
     try {
       await storage.deleteUser(Number(req.params.id));
@@ -381,6 +366,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ─── ADMIN: COURSES ────────────────────────────────────────────────────────
   app.get("/api/admin/courses", authMiddleware, adminMiddleware, async (_req, res) => {
     try {
       return res.json(await storage.getAllCourses());
@@ -399,45 +385,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.post("/api/admin/courses/:id/generate-description", authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    const course = await storage.getCourse(Number(req.params.id));
-    if (!course) return res.status(404).json({ error: "Course not found" });
-
-    const lessons = await storage.getLessonsForCourse(Number(req.params.id));
-    const lessonList = lessons.map((l, i) => `${i + 1}. ${l.title}`).join("\n");
-
-    const prompt = `Tum ek expert course marketing copywriter ho. Diye gaye course title aur lesson titles ke basis par ek detailed, engaging course description likho.
-
-Course Title: ${course.title}
-Category: ${course.category}
-Lessons:
-${lessonList}
-
-Description mein ye sab shamil ho:
-1. Ek strong hook line jo student ka attention pakray
-2. "Aap kya seekhenge" - har lesson ka topic cover karte hue 4-6 bullet points
-3. Ye course kis ke liye hai (target audience)
-4. Practical/hands-on approach ka zikar
-5. Last mein ye line zaroor add karo: "AI Mentor aapke saath hai - agar koi topic samajh na aaye to kisi bhi waqt pooch sakte hain."
-
-Description kam az kam 100-150 words ki ho, Roman Urdu aur English mix mein, motivating tone ke saath. Sirf description return karo, kuch aur text nahi.`;
-
-    let description = "";
+  app.patch("/api/admin/courses/:id", authMiddleware, adminMiddleware, async (req, res) => {
     try {
-      description = await groqChat([
-        { role: "user", content: prompt },
-      ], { max_tokens: 1024 });
-    } catch (aiErr: any) {
-      return res.status(503).json({ error: "AI service temporarily unavailable. Thodi der baad try karein." });
+      const { title, category, description, tags } = req.body;
+      const course = await storage.updateCourse(Number(req.params.id), { title, category, description, tags });
+      return res.json(course);
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
     }
-
-    description = description.trim();
-    return res.json({ description });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
-  }
-});
+  });
 
   app.delete("/api/admin/courses/:id", authMiddleware, adminMiddleware, async (req, res) => {
     try {
@@ -448,11 +404,48 @@ Description kam az kam 100-150 words ki ho, Roman Urdu aur English mix mein, mot
     }
   });
 
-  // ─── LESSON ROUTES ─────────────────────────────────────────────────────────
+  // ─── ADMIN: AI AUTO-GENERATE DESCRIPTION ──────────────────────────────────
+  app.post("/api/admin/courses/:id/generate-description", authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+      const course = await storage.getCourse(Number(req.params.id));
+      if (!course) return res.status(404).json({ error: "Course not found" });
+
+      const lessons = await storage.getLessonsForCourse(Number(req.params.id));
+      const lessonList = lessons.map((l, i) => `${i + 1}. ${l.title}`).join("\n");
+
+      const prompt = `Tum ek expert course marketing copywriter ho. Diye gaye course title aur lesson titles ke basis par ek detailed, engaging course description likho.
+
+Course Title: ${course.title}
+Category: ${course.category}
+Lessons:
+${lessonList}
+
+Description mein ye sab shamil ho:
+1. Ek strong hook line jo student ka attention pakray
+2. "Aap kya seekhenge" - 4-6 bullet points
+3. Ye course kis ke liye hai (target audience)
+4. Practical/hands-on approach ka zikar
+5. Last mein ye line zaroor add karo: "AI Mentor aapke saath hai - agar koi topic samajh na aaye to kisi bhi waqt pooch sakte hain."
+
+Description 100-150 words ki ho, Roman Urdu aur English mix mein, motivating tone ke saath. Sirf description return karo.`;
+
+      let description = "";
+      try {
+        description = await groqChat([{ role: "user", content: prompt }], { max_tokens: 1024 });
+      } catch {
+        return res.status(503).json({ error: "AI service temporarily unavailable." });
+      }
+
+      return res.json({ description: description.trim() });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ─── ADMIN: LESSONS ────────────────────────────────────────────────────────
   app.get("/api/courses/:id/lessons", authMiddleware, async (req, res) => {
     try {
-      const lessons = await storage.getLessonsForCourse(Number(req.params.id));
-      return res.json(lessons);
+      return res.json(await storage.getLessonsForCourse(Number(req.params.id)));
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }
@@ -460,8 +453,7 @@ Description kam az kam 100-150 words ki ho, Roman Urdu aur English mix mein, mot
 
   app.get("/api/admin/courses/:id/lessons", authMiddleware, adminMiddleware, async (req, res) => {
     try {
-      const lessons = await storage.getLessonsForCourse(Number(req.params.id));
-      return res.json(lessons);
+      return res.json(await storage.getLessonsForCourse(Number(req.params.id)));
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }
@@ -502,6 +494,7 @@ Description kam az kam 100-150 words ki ho, Roman Urdu aur English mix mein, mot
     }
   });
 
+  // ─── ADMIN: PAYMENT SETTINGS ───────────────────────────────────────────────
   app.get("/api/admin/payment-settings", authMiddleware, adminMiddleware, async (_req, res) => {
     try {
       return res.json(await storage.getAllPaymentSettings());
@@ -528,6 +521,7 @@ Description kam az kam 100-150 words ki ho, Roman Urdu aur English mix mein, mot
     }
   });
 
+  // ─── ADMIN: TRANSACTIONS ───────────────────────────────────────────────────
   app.get("/api/admin/transactions", authMiddleware, adminMiddleware, async (_req, res) => {
     try {
       return res.json(await storage.getAllTransactions());
@@ -540,18 +534,15 @@ Description kam az kam 100-150 words ki ho, Roman Urdu aur English mix mein, mot
     try {
       const { status } = req.body;
       const tx = await storage.updateTransactionStatus(Number(req.params.id), status);
-      if (status === "approved") {
-        await storage.updateUserSubscription(tx.user_id, true);
-      } else if (status === "rejected") {
-        await storage.updateUserSubscription(tx.user_id, false);
-      }
+      if (status === "approved") await storage.updateUserSubscription(tx.user_id, true);
+      else if (status === "rejected") await storage.updateUserSubscription(tx.user_id, false);
       return res.json(tx);
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }
   });
 
-  // ─── ADMIN COUPON MANAGEMENT ───────────────────────────────────────────────
+  // ─── ADMIN: COUPONS ────────────────────────────────────────────────────────
   app.get("/api/admin/coupons", authMiddleware, adminMiddleware, async (_req, res) => {
     try {
       return res.json(await storage.getAllCoupons());
@@ -581,6 +572,133 @@ Description kam az kam 100-150 words ki ho, Roman Urdu aur English mix mein, mot
     }
   });
 
+  // ─── GOOGLE DRIVE BULK IMPORT (with subfolder/chapter support) ────────────
+  app.get("/api/admin/drive/import", authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+      const folderUrl = req.query.folderUrl as string;
+      if (!folderUrl) return res.status(400).json({ error: "folderUrl is required" });
+
+      // Extract folder ID from URL
+      let folderId: string | null = null;
+      try {
+        const parsed = new URL(folderUrl);
+        const parts = parsed.pathname.split("/");
+        const idx = parts.indexOf("folders");
+        if (idx !== -1 && parts[idx + 1]) {
+          folderId = parts[idx + 1];
+        } else if (parsed.searchParams.get("id")) {
+          folderId = parsed.searchParams.get("id");
+        }
+      } catch {
+        folderId = folderUrl.trim();
+      }
+
+      if (!folderId) return res.status(400).json({ error: "Could not extract folder ID from URL" });
+
+      const apiKey = process.env.GOOGLE_DRIVE_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "GOOGLE_DRIVE_API_KEY is not configured" });
+
+      // Helper: check if a file is a video
+      function isVideoFile(mimeType: string, name: string): boolean {
+        if (mimeType.startsWith("video/")) return true;
+        if (mimeType === "application/octet-stream") {
+          const ext = name.split(".").pop()?.toLowerCase() || "";
+          return ["mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "m4v", "3gp"].includes(ext);
+        }
+        return false;
+      }
+
+      // Helper: fetch all items inside a folder
+      async function fetchFolderContents(id: string): Promise<{ id: string; name: string; mimeType: string }[]> {
+        const query = encodeURIComponent(`'${id}' in parents and trashed=false`);
+        const fields = encodeURIComponent("files(id,name,mimeType)");
+        const driveRes = await fetch(
+          `https://www.googleapis.com/drive/v3/files?q=${query}&fields=${fields}&orderBy=name&pageSize=1000&key=${encodeURIComponent(apiKey!)}`
+        );
+        if (!driveRes.ok) {
+          const errBody: any = await driveRes.json();
+          throw new Error(errBody?.error?.message || "Google Drive API error");
+        }
+        const data: { files: { id: string; name: string; mimeType: string }[] } = await driveRes.json();
+        return data.files || [];
+      }
+
+      // Step 1: Get all items in root folder
+      const rootItems = await fetchFolderContents(folderId);
+
+      const subfolders = rootItems
+        .filter(f => f.mimeType === "application/vnd.google-apps.folder")
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+
+      const rootVideos = rootItems
+        .filter(f => isVideoFile(f.mimeType, f.name))
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+
+      let lessons: { title: string; video_url: string; module_name: string }[] = [];
+
+      if (subfolders.length > 0) {
+        // Has subfolders → each subfolder = one chapter/module
+        for (const folder of subfolders) {
+          const folderItems = await fetchFolderContents(folder.id);
+          const videos = folderItems
+            .filter(f => isVideoFile(f.mimeType, f.name))
+            .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
+
+          for (const video of videos) {
+            lessons.push({
+              title: video.name.replace(/\.[^/.]+$/, ""),
+              video_url: `https://drive.google.com/file/d/${video.id}/preview`,
+              module_name: folder.name, // subfolder name = chapter name
+            });
+          }
+        }
+
+        // Also include any root-level videos under "General"
+        for (const video of rootVideos) {
+          lessons.push({
+            title: video.name.replace(/\.[^/.]+$/, ""),
+            video_url: `https://drive.google.com/file/d/${video.id}/preview`,
+            module_name: "General",
+          });
+        }
+      } else {
+        // No subfolders → all videos in root, single module
+        for (const video of rootVideos) {
+          lessons.push({
+            title: video.name.replace(/\.[^/.]+$/, ""),
+            video_url: `https://drive.google.com/file/d/${video.id}/preview`,
+            module_name: "Module 1",
+          });
+        }
+      }
+
+      return res.json({ lessons, chapters: subfolders.length });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ─── APP SETTINGS / PRICING ────────────────────────────────────────────────
+  app.get("/api/settings/price", async (_req, res) => {
+    try {
+      const price = await storage.getSubscriptionPrice();
+      return res.json({ subscription_price: price });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/admin/settings/price", authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+      const price = parseInt(req.body.subscription_price, 10);
+      if (isNaN(price) || price < 1) return res.status(400).json({ error: "Invalid price" });
+      const updated = await storage.updateSubscriptionPrice(price);
+      return res.json({ subscription_price: updated });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   // ─── AI CAREER ANALYSIS ────────────────────────────────────────────────────
   app.post("/api/ai/career-analysis", authMiddleware, async (req: AuthRequest, res) => {
     try {
@@ -588,35 +706,21 @@ Description kam az kam 100-150 words ki ho, Roman Urdu aur English mix mein, mot
       const skill = await storage.getSkillScore(userId);
       if (!skill) return res.status(400).json({ error: "Complete the skill test first" });
 
-      const prompt = `User skill assessment for career analysis:
+      const prompt = `User skill assessment:
+SKILL SCORES: Technical: ${skill.technical}/100, Communication: ${skill.communication}/100, Logical: ${skill.logical}/100, Digital: ${skill.digital}/100
+BACKGROUND: Goal: ${skill.goal || "Not specified"}, Skills: ${skill.existing_skill || "None"}, Device: ${skill.available_tool || "Not specified"}
+Note: If device is mobile/phone only, recommend mobile-friendly careers only.
 
-SKILL SCORES (out of 100):
-- Technical Skills: ${skill.technical}/100
-- Communication: ${skill.communication}/100
-- Logical Reasoning: ${skill.logical}/100
-- Digital Literacy: ${skill.digital}/100
-
-BACKGROUND:
-- Career Goal: ${skill.goal || "Not specified"}
-- Existing Skills: ${skill.existing_skill || "None mentioned"}
-- Available Device: ${skill.available_tool || "Not specified"}
-
-Note: If device is mobile/phone only, recommend mobile-friendly career paths only.
-
-Output ONLY this exact JSON structure (no markdown, no text before or after the JSON):
+Output ONLY this JSON (no markdown):
 {
-  "skill_path": "Primary career path (e.g. Fiverr Freelancing — Logo Design)",
-  "secondary_path": "Secondary career option (e.g. Social Media Marketing)",
-  "personality_type": "One of: Entrepreneur / Creative / Analyst / Communicator",
-  "income_6m": "Realistic PKR income at 6 months (e.g. Rs. 25,000 – 50,000/month)",
-  "income_12m": "Realistic PKR income at 12 months (e.g. Rs. 60,000 – 1,20,000/month)",
+  "skill_path": "Primary career path",
+  "secondary_path": "Secondary career option",
+  "personality_type": "Entrepreneur / Creative / Analyst / Communicator",
+  "income_6m": "Realistic PKR income at 6 months",
+  "income_12m": "Realistic PKR income at 12 months",
   "recommended_skills": ["skill1", "skill2", "skill3", "skill4"],
-  "roadmap": {
-    "month1": "Month 1 plan in Roman Urdu: fundamentals + ONE tool to master",
-    "month2": "Month 2 plan in Roman Urdu: portfolio + first samples",
-    "month3": "Month 3 plan in Roman Urdu: launch on freelancing platform + first client"
-  },
-  "rarity": "a number 1-15 only, representing how rare this profile is as a percentage",
+  "roadmap": { "month1": "...", "month2": "...", "month3": "..." },
+  "rarity": "1-15",
   "pitch": "use the exact pitch value from your system instructions"
 }`;
 
@@ -627,17 +731,15 @@ Output ONLY this exact JSON structure (no markdown, no text before or after the 
           { role: "user", content: prompt },
         ]);
       } catch (aiErr: any) {
-        console.error("[groq] career-analysis AI call failed:", aiErr?.message);
-        return res.status(503).json({ error: "AI service temporarily unavailable. Thodi der baad try karein." });
+        return res.status(503).json({ error: "AI service temporarily unavailable." });
       }
 
       let data: Record<string, any> = {};
       try {
         const cleaned = text.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
         data = JSON.parse(cleaned);
-      } catch (parseErr) {
-        console.error("[groq] career-analysis JSON parse failed. Raw response:", text.slice(0, 300));
-        return res.status(500).json({ error: "AI response parse error. Please try again." });
+      } catch {
+        return res.status(500).json({ error: "AI response parse error." });
       }
 
       const analysis = await storage.saveCareerAnalysis({
@@ -709,7 +811,6 @@ Output ONLY this exact JSON structure (no markdown, no text before or after the 
     }
   });
 
-  // 1080×1080 square — for PNG/JPG download + Instagram
   app.get("/result-image/:shareId/square", async (req, res) => {
     try {
       const analysis = await storage.getCareerAnalysisByShareId(req.params.shareId);
@@ -734,8 +835,7 @@ Output ONLY this exact JSON structure (no markdown, no text before or after the 
   // ─── REFERRAL LEADERBOARD & REWARDS ────────────────────────────────────────
   app.get("/api/referral/leaderboard", authMiddleware, async (_req, res) => {
     try {
-      const leaderboard = await storage.getReferralLeaderboard();
-      return res.json(leaderboard);
+      return res.json(await storage.getReferralLeaderboard());
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }
@@ -758,220 +858,27 @@ Output ONLY this exact JSON structure (no markdown, no text before or after the 
     }
   });
 
+  app.get("/api/referral/stats", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      return res.json(await storage.getReferralStats(req.user!.id));
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   // ─── GIVEAWAY STATS ────────────────────────────────────────────────────────
   app.get("/api/giveaway/stats", async (_req, res) => {
     try {
-      const stats = await storage.getGiveawayStats();
-      return res.json(stats);
+      return res.json(await storage.getGiveawayStats());
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }
   });
 
-  // ─── REFERRAL SYSTEM ───────────────────────────────────────────────────────
-  app.get("/api/referral/stats", authMiddleware, async (req: AuthRequest, res) => {
-    try {
-      const stats = await storage.getReferralStats(req.user!.id);
-      return res.json(stats);
-    } catch (err: any) {
-      return res.status(500).json({ error: err.message });
-    }
-  });
-
-  // ─── GOOGLE DRIVE BULK IMPORT ──────────────────────────────────────────────
-  // ─── GOOGLE DRIVE BULK IMPORT (with subfolder/chapter support) ────────────────
-app.get("/api/admin/drive/import", authMiddleware, adminMiddleware, async (req, res) => {
-  try {
-    const folderUrl = req.query.folderUrl as string;
-    if (!folderUrl) return res.status(400).json({ error: "folderUrl is required" });
-
-    // Extract folder ID from URL
-    let folderId: string | null = null;
-    try {
-      const parsed = new URL(folderUrl);
-      const parts = parsed.pathname.split("/");
-      const idx = parts.indexOf("folders");
-      if (idx !== -1 && parts[idx + 1]) {
-        folderId = parts[idx + 1];
-      } else if (parsed.searchParams.get("id")) {
-        folderId = parsed.searchParams.get("id");
-      }
-    } catch {
-      folderId = folderUrl.trim();
-    }
-
-    if (!folderId) return res.status(400).json({ error: "Could not extract folder ID from the provided URL" });
-
-    const apiKey = process.env.GOOGLE_DRIVE_API_KEY;
-    if (!apiKey) return res.status(500).json({ error: "GOOGLE_DRIVE_API_KEY is not configured on the server" });
-
-    // Helper: fetch all items inside a folder
-    async function fetchFolderContents(id: string): Promise<{ id: string; name: string; mimeType: string }[]> {
-      const query = encodeURIComponent(`'${id}' in parents and trashed=false`);
-      const fields = encodeURIComponent("files(id,name,mimeType)");
-      const driveRes = await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=${query}&fields=${fields}&orderBy=name&pageSize=200&key=${encodeURIComponent(apiKey!)}`
-      );
-      if (!driveRes.ok) {
-        const errBody: any = await driveRes.json();
-        throw new Error(errBody?.error?.message || "Google Drive API error");
-      }
-      const data: { files: { id: string; name: string; mimeType: string }[] } = await driveRes.json();
-      return data.files || [];
-    }
-
-    // Helper: check if a mimeType is a video or media file
-    function isVideoFile(mimeType: string, name: string): boolean {
-      if (mimeType.startsWith("video/")) return true;
-      if (mimeType === "application/octet-stream") {
-        const ext = name.split(".").pop()?.toLowerCase() || "";
-        return ["mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "m4v", "3gp"].includes(ext);
-      }
-      return false;
-    }
-
-    // Step 1: Get all items in the root folder
-    const rootItems = await fetchFolderContents(folderId);
-
-    const subfolders = rootItems.filter(f => f.mimeType === "application/vnd.google-apps.folder");
-    const rootVideos = rootItems.filter(f => isVideoFile(f.mimeType, f.name));
-
-    let lessons: { title: string; video_url: string; module_name: string }[] = [];
-
-    if (subfolders.length > 0) {
-      // Has subfolders → treat each subfolder as a chapter/module
-      for (const folder of subfolders) {
-        const folderItems = await fetchFolderContents(folder.id);
-        const videos = folderItems
-          .filter(f => isVideoFile(f.mimeType, f.name))
-          .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
-
-        for (const video of videos) {
-          lessons.push({
-            title: video.name.replace(/\.[^/.]+$/, ""), // remove extension
-            video_url: `https://drive.google.com/file/d/${video.id}/preview`,
-            module_name: folder.name, // subfolder name = chapter name
-          });
-        }
-      }
-
-      // Also include any videos directly in root folder (no module)
-      const rootVideosSorted = rootVideos.sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
-      );
-      for (const video of rootVideosSorted) {
-        lessons.push({
-          title: video.name.replace(/\.[^/.]+$/, ""),
-          video_url: `https://drive.google.com/file/d/${video.id}/preview`,
-          module_name: "General",
-        });
-      }
-    } else {
-      // No subfolders → all videos in root, single module
-      const sorted = rootVideos.sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
-      );
-      for (const video of sorted) {
-        lessons.push({
-          title: video.name.replace(/\.[^/.]+$/, ""),
-          video_url: `https://drive.google.com/file/d/${video.id}/preview`,
-          module_name: "Module 1",
-        });
-      }
-    }
-
-    return res.json({ lessons, chapters: subfolders.length });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-      // Recursive function to fetch all files from folder + sub-folders
-      // IMPORTANT: Each folder's files are sorted internally (by Drive API orderBy=name),
-      // but the overall order across modules is preserved by folder traversal order
-      // (no global re-sort, so Module 1's videos stay together before Module 2's videos).
-      async function fetchAllFiles(parentId: string, moduleName: string = ""): Promise<{title: string, video_url: string, module_name: string}[]> {
-        const query = encodeURIComponent(`'${parentId}' in parents and trashed=false`);
-        const fields = encodeURIComponent("files(id,name,mimeType)");
-        const driveRes = await fetch(
-          `https://www.googleapis.com/drive/v3/files?q=${query}&fields=${fields}&orderBy=folder,name&pageSize=1000&key=${encodeURIComponent(apiKey)}`
-        );
-        if (!driveRes.ok) {
-          const errBody: any = await driveRes.json();
-          throw new Error(errBody?.error?.message || "Google Drive API error");
-        }
-        const driveData: { files: { id: string; name: string; mimeType: string }[] } = await driveRes.json();
-        const files = driveData.files || [];
-
-        // Separate folders and video files at this level
-        const subFolders = files.filter(f => f.mimeType === "application/vnd.google-apps.folder");
-        const videoFiles = files.filter(f =>
-          f.mimeType !== "application/vnd.google-apps.folder" && (
-            f.mimeType.includes("video") ||
-            f.mimeType === "application/octet-stream" ||
-            f.name.match(/\.(mp4|mkv|avi|mov|webm|flv)$/i)
-          )
-        );
-
-        // Sort videos within this folder by name (numeric-aware)
-        videoFiles.sort((a, b) =>
-          a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
-        );
-
-        let results: {title: string, video_url: string, module_name: string}[] = videoFiles.map(f => ({
-          title: f.name.replace(/\.[^/.]+$/, ""),
-          video_url: `https://drive.google.com/file/d/${f.id}/preview`,
-          module_name: moduleName,
-        }));
-
-        // Sort sub-folders by name (numeric-aware) so Module 1 comes before Module 2, etc.
-        subFolders.sort((a, b) =>
-          a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
-        );
-
-        // Process each sub-folder in order, appending its videos as its own module group
-        for (const folder of subFolders) {
-          const subFiles = await fetchAllFiles(folder.id, folder.name);
-          results = results.concat(subFiles);
-        }
-
-        return results;
-      }
-
-      const lessons = await fetchAllFiles(folderId);
-      return res.json({ lessons });
-
-    } catch (err: any) {
-      return res.status(500).json({ error: err.message });
-    }
-  });
-
-  // ─── APP SETTINGS / PRICING ────────────────────────────────────────────────
-  app.get("/api/settings/price", async (_req, res) => {
-    try {
-      const price = await storage.getSubscriptionPrice();
-      return res.json({ subscription_price: price });
-    } catch (err: any) {
-      return res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.patch("/api/admin/settings/price", authMiddleware, adminMiddleware, async (req, res) => {
-    try {
-      const price = parseInt(req.body.subscription_price, 10);
-      if (isNaN(price) || price < 1) return res.status(400).json({ error: "Invalid price" });
-      const updated = await storage.updateSubscriptionPrice(price);
-      return res.json({ subscription_price: updated });
-    } catch (err: any) {
-      return res.status(500).json({ error: err.message });
-    }
-  });
-
-  // ─── ADMIN REFERRAL MANAGEMENT ──────────────────────────────────────────────
+  // ─── ADMIN: REFERRAL MANAGEMENT ────────────────────────────────────────────
   app.get("/api/admin/referrals", authMiddleware, adminMiddleware, async (_req, res) => {
     try {
-      const data = await storage.getAllUsersWithReferralStats();
-      return res.json(data);
+      return res.json(await storage.getAllUsersWithReferralStats());
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }
@@ -979,8 +886,7 @@ app.get("/api/admin/drive/import", authMiddleware, adminMiddleware, async (req, 
 
   app.get("/api/admin/referrals/settings", authMiddleware, adminMiddleware, async (_req, res) => {
     try {
-      const settings = await storage.getReferralSettings();
-      return res.json(settings);
+      return res.json(await storage.getReferralSettings());
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }
@@ -1011,7 +917,6 @@ app.get("/api/admin/drive/import", authMiddleware, adminMiddleware, async (req, 
     }
   });
 
-  // Export referral data as CSV
   app.get("/api/admin/referrals/export", authMiddleware, adminMiddleware, async (_req, res) => {
     try {
       const data = await storage.getAllUsersWithReferralStats();
@@ -1024,7 +929,7 @@ app.get("/api/admin/drive/import", authMiddleware, adminMiddleware, async (req, 
       );
       const csv = [header, ...rows].join("\n");
       res.setHeader("Content-Type", "text/csv");
-      res.setHeader("Content-Disposition", "attachment; filename=byonsoft-referrals.csv");
+      res.setHeader("Content-Disposition", "attachment; filename=referrals.csv");
       return res.send(csv);
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
