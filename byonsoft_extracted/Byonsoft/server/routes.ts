@@ -573,6 +573,47 @@ Description 100-150 words ki ho, Roman Urdu aur English mix mein, motivating ton
   });
 
   // ─── GOOGLE DRIVE BULK IMPORT (with subfolder/chapter support) ────────────
+  app.post("/api/admin/bulk-import/generate-meta", authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { title } = req.body;
+    if (!title || title.trim().length < 3)
+      return res.status(400).json({ error: "Title required" });
+
+    const prompt = `You are a course catalog AI. Generate metadata for this course: "${title.trim()}"
+
+Output ONLY valid JSON (no markdown, no extra text):
+{
+  "category": "one of: Web Development, Digital Marketing, AI & Automation, Freelancing & Agency, Design & Creative Skills, E-Commerce, Programming, Business",
+  "description": "3-5 sentence course description in Roman Urdu/English mix covering what students will learn and career outcome",
+  "tags": "comma-separated 4-6 lowercase tags e.g. shopify, dropshipping, ecommerce"
+}`;
+
+    let raw = "";
+    try {
+      raw = await groqChat([
+        { role: "system", content: "You are a JSON-only API. Output only valid JSON, no markdown." },
+        { role: "user", content: prompt },
+      ]);
+    } catch {
+      return res.status(503).json({ error: "AI service unavailable" });
+    }
+
+    const cleaned = raw.replace(/```json\s*/gi, "").replace(/```\s*/gi, "").trim();
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start === -1 || end === -1)
+      return res.status(500).json({ error: "AI response parse error" });
+
+    const parsed = JSON.parse(cleaned.slice(start, end + 1));
+    return res.json({
+      category: String(parsed.category ?? "Freelancing & Agency"),
+      description: String(parsed.description ?? ""),
+      tags: String(parsed.tags ?? ""),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
   app.get("/api/admin/drive/import", authMiddleware, adminMiddleware, async (req, res) => {
     try {
       const folderUrl = req.query.folderUrl as string;
