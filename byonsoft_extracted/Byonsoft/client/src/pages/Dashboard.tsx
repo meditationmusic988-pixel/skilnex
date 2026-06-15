@@ -134,17 +134,7 @@ export default function Dashboard() {
   const premiumCount = giveawayStats?.activeUsers ?? 0;
   const isPhase2 = premiumCount >= 300;
 
-  // ── Parse roadmap result (same data SkillTest Phase 4 shows) ──
-  const roadmapResult = useMemo(() => {
-    if (!skillScore?.roadmap_result) return null;
-    try {
-      return JSON.parse(skillScore.roadmap_result);
-    } catch {
-      return null;
-    }
-  }, [skillScore]);
-
-  // ── Roadmap for AIRoadmapSection ──
+  // ── Roadmap — used by both StatsOverview (score) and AIRoadmapSection ──
   const roadmap = useMemo(() => parseRoadmap(skillScore), [skillScore]);
   const roadmapSkills = useMemo(() => extractRoadmapSkills(skillScore), [skillScore]);
 
@@ -247,7 +237,7 @@ export default function Dashboard() {
           hasAssessment={hasAssessment}
           inProgressCount={inProgressCount}
           onAssessmentClick={() => setLocation("/skill-test?new=1")}
-          roadmapResult={roadmapResult}
+          roadmap={roadmap}
         />
 
         <AIRoadmapSection
