@@ -32,6 +32,21 @@ import {
 
 import type { Course, Progress as ProgressType, SkillScore } from "@shared/schema";
 
+// ── Career result type (from /api/career-results/me/latest) ──
+interface CareerAnalysisResult {
+  share_id: string;
+  skill_path: string;
+  secondary_path: string;
+  personality_type: string;
+  income_6m: string;
+  income_12m: string;
+  recommended_skills: string[];
+  roadmap: { month1?: string; month2?: string; month3?: string };
+  rarity: string;
+  result_image_url: string;
+  created_at: string;
+}
+
 // ── Certificate generator ──
 function generateCertificateHTML(userName: string, course: Course): string {
   const dateStr = new Date().toLocaleDateString("en-PK", {
@@ -123,6 +138,20 @@ export default function Dashboard() {
     staleTime: 1000 * 60 * 5,
   });
 
+  // ── Latest career result (skill test se) ──
+  const { data: careerResult } = useQuery<CareerAnalysisResult | null>({
+    queryKey: ["/api/career-results/me/latest"],
+    queryFn: async () => {
+      const token = localStorage.getItem("token");
+      const r = await fetch("/api/career-results/me/latest", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) return null;
+      return r.json();
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+
   // ── Derived state ──
   const price = priceSetting?.subscription_price ?? 750;
   const premium = checkPremium(user);
@@ -158,7 +187,12 @@ export default function Dashboard() {
 
   const hasRoadmapMatches = matchedCourses.length > 0;
   const skillLabel = useMemo(() => getSkillLabel(roadmapSkills), [roadmapSkills]);
-  const firstClientSteps = useMemo(() => buildFirstClientSteps(skillLabel), [skillLabel]);
+
+  // ── First client steps — goal ke basis pe alag ──
+  const firstClientSteps = useMemo(
+    () => buildFirstClientSteps(skillLabel, skillScore?.goal ?? ""),
+    [skillLabel, skillScore?.goal]
+  );
 
   // ── Handlers ──
   const handleRefreshUser = useCallback(async () => {
@@ -234,7 +268,7 @@ export default function Dashboard() {
           onRefresh={handleRefreshUser}
         />
 
-        {/* Stats row */}
+        {/* Stats row — career result bhi dikhao */}
         <StatsOverview
           isPhase2={isPhase2}
           completedCount={completedCount}
@@ -242,6 +276,10 @@ export default function Dashboard() {
           hasAssessment={hasAssessment}
           inProgressCount={inProgressCount}
           onAssessmentClick={() => setLocation("/skill-test?new=1")}
+          careerPath={careerResult?.skill_path}
+          income6m={careerResult?.income_6m}
+          income12m={careerResult?.income_12m}
+          shareId={careerResult?.share_id}
         />
 
         {/* AI Roadmap — matched courses pass karo */}
@@ -252,7 +290,7 @@ export default function Dashboard() {
           onGetRoadmap={() => setLocation("/skill-test?new=1")}
         />
 
-        {/* First Client Guide */}
+        {/* First Client Guide — goal ke basis pe personalized */}
         <FirstClientGuide
           steps={firstClientSteps}
           skillLabel={skillLabel}
