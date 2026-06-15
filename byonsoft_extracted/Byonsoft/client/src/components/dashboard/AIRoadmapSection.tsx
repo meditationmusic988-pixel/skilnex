@@ -14,11 +14,13 @@ import {
   Clock,
   CheckCircle,
 } from "lucide-react";
+import type { Course } from "@shared/schema";
 import type { ParsedRoadmap } from "../../utils/roadmap";
 import { STEP_COLORS } from "../../utils/roadmap";
 
 interface AIRoadmapSectionProps {
   roadmap: ParsedRoadmap | null;
+  matchedCourses: Course[];
   onImprove: () => void;
   onGetRoadmap: () => void;
 }
@@ -111,10 +113,14 @@ const SkillScoreCard = React.memo(function SkillScoreCard({
 
 export const AIRoadmapSection = React.memo(function AIRoadmapSection({
   roadmap,
+  matchedCourses,
   onImprove,
   onGetRoadmap,
 }: AIRoadmapSectionProps) {
-  const hasRoadmap = roadmap && (roadmap.recommended_courses?.length ?? 0) > 0;
+  const hasRoadmap =
+    roadmap &&
+    ((roadmap.recommended_courses?.length ?? 0) > 0 ||
+      (roadmap.career_paths?.length ?? 0) > 0);
 
   if (!hasRoadmap) {
     return <RoadmapEmpty onGetRoadmap={onGetRoadmap} />;
@@ -198,8 +204,8 @@ export const AIRoadmapSection = React.memo(function AIRoadmapSection({
         )}
       </div>
 
-      {/* Recommended Courses */}
-      {(roadmap!.recommended_courses?.length ?? 0) > 0 && (
+      {/* Recommended Courses — actual app courses */}
+      {matchedCourses.length > 0 && (
         <Card className="bg-slate-800/60 border-slate-700/60 overflow-hidden">
           <div className="h-0.5 bg-gradient-to-r from-blue-600 to-indigo-600" />
           <CardContent className="p-5">
@@ -208,17 +214,25 @@ export const AIRoadmapSection = React.memo(function AIRoadmapSection({
                 <BookOpen className="w-3.5 h-3.5 text-blue-400" />
               </div>
               <p className="text-white font-semibold text-sm">Recommended Courses</p>
+              <span className="ml-auto text-xs text-slate-500">
+                {matchedCourses.length} course{matchedCourses.length > 1 ? "s" : ""}
+              </span>
             </div>
             <div className="grid sm:grid-cols-2 gap-2">
-              {roadmap!.recommended_courses!.map((c, i) => (
+              {matchedCourses.map((course, i) => (
                 <div
-                  key={i}
+                  key={course.id}
                   className="flex items-center gap-3 p-3 rounded-xl bg-slate-700/40 border border-slate-600/30 hover:border-blue-500/25 transition-colors"
                 >
                   <span className="w-6 h-6 rounded-full bg-blue-600/25 text-blue-300 text-xs font-bold flex items-center justify-center shrink-0">
                     {i + 1}
                   </span>
-                  <span className="text-slate-200 text-sm leading-snug">{c}</span>
+                  <div className="min-w-0">
+                    <p className="text-slate-200 text-sm leading-snug truncate">
+                      {course.title}
+                    </p>
+                    <p className="text-slate-500 text-xs">{course.category}</p>
+                  </div>
                 </div>
               ))}
             </div>
