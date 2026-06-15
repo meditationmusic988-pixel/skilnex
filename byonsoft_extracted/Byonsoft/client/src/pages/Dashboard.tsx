@@ -1,136 +1,87 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useLocation, Link } from "wouter";
+import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Skeleton } from "@/components/ui/skeleton";
 import { UpgradeModal } from "@/components/UpgradeModal";
 import { useToast } from "@/hooks/use-toast";
-import {
-  BookOpen, Lock, Zap, TrendingUp, Star, Award, ChevronRight,
-  Brain, Activity, LogOut, CheckCircle, Download, User, Phone, FileText, Shield as ShieldIcon,
-  Trophy, Briefcase, DollarSign, ListOrdered, MessageCircle, X as XIcon, Target, Users, Rocket,
-  Clock, Sparkles, PlayCircle, GraduationCap, ChevronUp
-} from "lucide-react";
 import { MegaLaunchBanner, ReferralCard, ReferralRewards } from "@/components/GiveawayBanner";
 import { PWAInstallButton } from "@/components/PWAInstallButton";
+
+// ── Dashboard Components ──
+import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
+import { WelcomeHero } from "@/components/dashboard/WelcomeHero";
+import { StatsOverview } from "@/components/dashboard/StatsOverview";
+import { AIRoadmapSection } from "@/components/dashboard/AIRoadmapSection";
+import { FirstClientGuide } from "@/components/dashboard/FirstClientGuide";
+import { CoursesGrid } from "@/components/dashboard/CoursesGrid";
+import { PricingSection } from "@/components/dashboard/PricingSection";
+import { GiveawayTracker } from "@/components/dashboard/GiveawayTracker";
+import { DashboardFooter } from "@/components/dashboard/DashboardFooter";
+
+// ── Utils ──
+import { isPremium as checkPremium } from "@/utils/premium";
+import {
+  countCompleted,
+  countInProgress,
+} from "@/utils/progress";
+import {
+  parseRoadmap,
+  extractRoadmapSkills,
+  isTagMatch,
+  sortCoursesByRoadmap,
+  getSkillLabel,
+  buildFirstClientSteps,
+} from "@/utils/roadmap";
+
 import type { Course, Progress as ProgressType, SkillScore } from "@shared/schema";
 
-function toArray(val: any): string[] {
-  if (Array.isArray(val)) return val;
-  if (val && typeof val === "object") return Object.values(val);
-  if (typeof val === "string" && val.trim()) {
-    const lines = val.split(/\n|→/).map((s: string) => s.trim()).filter(Boolean);
-    return lines.length > 1 ? lines : [val.trim()];
-  }
-  return [];
-}
-
-export default function Dashboard() {
-  const [, setLocation] = useLocation();
-  const { user, logout, updateUser } = useAuth();
-  const { toast } = useToast();
-  const [upgradeOpen, setUpgradeOpen] = useState(false);
-
-  const { data: courses = [], isLoading: coursesLoading } = useQuery<Course[]>({ queryKey: ["/api/courses"] });
-  const { data: progressList = [] } = useQuery<ProgressType[]>({ queryKey: ["/api/progress"] });
-  const { data: skillScore } = useQuery<SkillScore | null>({ queryKey: ["/api/skills"] });
-  const { data: priceSetting } = useQuery<{ subscription_price: number }>({ queryKey: ["/api/settings/price"] });
-  const price = priceSetting?.subscription_price ?? 750;
-
-  const { data: giveawayStats } = useQuery<{ activeUsers: number; nextMilestone: number; prevMilestone: number }>({
-    queryKey: ["/api/giveaway/stats"],
-    staleTime: 1000 * 60 * 5,
+// ── Certificate generator (kept in Dashboard, UI-only concern) ──
+function generateCertificateHTML(userName: string, course: Course): string {
+  const dateStr = new Date().toLocaleDateString("en-PK", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
   });
-  const premiumCount = giveawayStats?.activeUsers ?? 0;
-  const isPhase2 = premiumCount >= 300;
 
-  const hasAssessment = !!(skillScore?.goal);
-  const getProgress = (courseId: number) => progressList.find((p) => p.course_id === courseId);
-
-  const roadmapSkills = useMemo(() => {
-    const raw: string[] = [];
-    if (skillScore?.roadmap_result) {
-      try {
-        const parsed = JSON.parse(skillScore.roadmap_result);
-        if (Array.isArray(parsed.recommended_courses)) raw.push(...parsed.recommended_courses);
-        if (Array.isArray(parsed.career_paths)) raw.push(...parsed.career_paths);
-      } catch {}
-    }
-    return raw.map((s) => s.trim().toLowerCase()).filter((v) => v.length > 0).filter((v, i, a) => a.indexOf(v) === i);
-  }, [skillScore]);
-
-  const isTagMatch = useMemo(() => {
-    return (course: Course): boolean => {
-      if (!roadmapSkills.length) return false;
-      const courseTags = (course.tags || "").split(",").map((t) => t.trim().toLowerCase()).filter((t) => t.length > 0);
-      if (!courseTags.length) return false;
-      return roadmapSkills.some((skill) => courseTags.some((tag) => tag.includes(skill) || skill.includes(tag)));
-    };
-  }, [roadmapSkills]);
-
-  const sortedCourses = useMemo(() => {
-    if (!roadmapSkills.length) return courses;
-    const matched = courses.filter((c) => isTagMatch(c));
-    const rest = courses.filter((c) => !isTagMatch(c));
-    return [...matched, ...rest];
-  }, [courses, roadmapSkills, isTagMatch]);
-
-  const hasRoadmapMatches = roadmapSkills.length > 0 && courses.some((c) => isTagMatch(c));
-
-  const refreshUser = async () => {
-    try {
-      const res = await fetch("/api/auth/me", { headers: { Authorization: `Bearer ${localStorage.getItem("byonsoft_token")}` } });
-      const u = await res.json();
-      if (u.id) updateUser(u);
-    } catch {}
-  };
-
-  // ── Certificate with Skilnex branding ──
-  const downloadCertificate = (course: Course) => {
-    const now = new Date();
-    const dateStr = now.toLocaleDateString("en-PK", { year: "numeric", month: "long", day: "numeric" });
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Certificate - ${course.title}</title>
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Certificate — ${course.title}</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;600&display=swap');
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Inter', sans-serif; background: #0f172a; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-  .cert { width: 900px; min-height: 640px; background: linear-gradient(135deg, #1e293b 0%, #0f172a 50%, #1e293b 100%); border: 3px solid #3b82f6; border-radius: 24px; padding: 60px 80px; text-align: center; color: white; position: relative; box-shadow: 0 0 80px rgba(59,130,246,0.3); }
-  .corner { position: absolute; width: 80px; height: 80px; border-color: #3b82f6; border-style: solid; }
-  .tl { top: 20px; left: 20px; border-width: 3px 0 0 3px; border-radius: 8px 0 0 0; }
-  .tr { top: 20px; right: 20px; border-width: 3px 3px 0 0; border-radius: 0 8px 0 0; }
-  .bl { bottom: 20px; left: 20px; border-width: 0 0 3px 3px; border-radius: 0 0 0 8px; }
-  .br { bottom: 20px; right: 20px; border-width: 0 3px 3px 0; border-radius: 0 0 8px 0; }
-  .logo { font-size: 13px; color: #94a3b8; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 12px; }
-  .title { font-family: 'Playfair Display', serif; font-size: 48px; color: #f8fafc; margin-bottom: 4px; }
-  .subtitle { font-size: 14px; color: #64748b; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 40px; }
-  .divider { width: 200px; height: 2px; background: linear-gradient(90deg, transparent, #3b82f6, transparent); margin: 0 auto 40px; }
-  .presented { font-size: 14px; color: #64748b; margin-bottom: 12px; }
-  .name { font-family: 'Playfair Display', serif; font-size: 36px; color: #60a5fa; margin-bottom: 24px; }
-  .course-label { font-size: 14px; color: #64748b; margin-bottom: 8px; }
-  .course { font-size: 22px; font-weight: 600; color: #f1f5f9; margin-bottom: 8px; }
-  .category { display: inline-block; background: rgba(59,130,246,0.2); border: 1px solid rgba(59,130,246,0.4); color: #93c5fd; padding: 4px 16px; border-radius: 100px; font-size: 12px; margin-bottom: 40px; }
-  .divider2 { width: 100%; height: 1px; background: rgba(59,130,246,0.2); margin-bottom: 30px; }
-  .footer { display: flex; justify-content: space-between; align-items: flex-end; }
-  .sig-name { font-size: 16px; font-weight: 600; color: #f1f5f9; }
-  .sig-role { font-size: 12px; color: #64748b; }
-  .stamp { width: 80px; height: 80px; border: 2px solid #3b82f6; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-direction: column; }
-  .stamp-text { font-size: 8px; color: #3b82f6; font-weight: 600; text-align: center; letter-spacing: 1px; }
-  .date-label { font-size: 12px; color: #64748b; }
-  .date-val { font-size: 14px; color: #f1f5f9; font-weight: 600; }
-  @media print { body { background: white; } }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Inter',sans-serif;background:#0f172a;display:flex;align-items:center;justify-content:center;min-height:100vh}
+  .cert{width:900px;min-height:640px;background:linear-gradient(135deg,#1e293b 0%,#0f172a 50%,#1e293b 100%);border:3px solid #3b82f6;border-radius:24px;padding:60px 80px;text-align:center;color:white;position:relative;box-shadow:0 0 80px rgba(59,130,246,.3)}
+  .corner{position:absolute;width:80px;height:80px;border-color:#3b82f6;border-style:solid}
+  .tl{top:20px;left:20px;border-width:3px 0 0 3px;border-radius:8px 0 0 0}
+  .tr{top:20px;right:20px;border-width:3px 3px 0 0;border-radius:0 8px 0 0}
+  .bl{bottom:20px;left:20px;border-width:0 0 3px 3px;border-radius:0 0 0 8px}
+  .br{bottom:20px;right:20px;border-width:0 3px 3px 0;border-radius:0 0 8px 0}
+  .logo{font-size:13px;color:#94a3b8;letter-spacing:3px;text-transform:uppercase;margin-bottom:12px}
+  .title{font-family:'Playfair Display',serif;font-size:48px;color:#f8fafc;margin-bottom:4px}
+  .subtitle{font-size:14px;color:#64748b;letter-spacing:4px;text-transform:uppercase;margin-bottom:40px}
+  .divider{width:200px;height:2px;background:linear-gradient(90deg,transparent,#3b82f6,transparent);margin:0 auto 40px}
+  .presented{font-size:14px;color:#64748b;margin-bottom:12px}
+  .name{font-family:'Playfair Display',serif;font-size:36px;color:#60a5fa;margin-bottom:24px}
+  .course-label{font-size:14px;color:#64748b;margin-bottom:8px}
+  .course{font-size:22px;font-weight:600;color:#f1f5f9;margin-bottom:8px}
+  .category{display:inline-block;background:rgba(59,130,246,.2);border:1px solid rgba(59,130,246,.4);color:#93c5fd;padding:4px 16px;border-radius:100px;font-size:12px;margin-bottom:40px}
+  .divider2{width:100%;height:1px;background:rgba(59,130,246,.2);margin-bottom:30px}
+  .footer{display:flex;justify-content:space-between;align-items:flex-end}
+  .sig-name{font-size:16px;font-weight:600;color:#f1f5f9}
+  .sig-role{font-size:12px;color:#64748b}
+  .stamp{width:80px;height:80px;border:2px solid #3b82f6;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-direction:column}
+  .stamp-text{font-size:8px;color:#3b82f6;font-weight:600;text-align:center;letter-spacing:1px}
+  .date-label{font-size:12px;color:#64748b}
+  .date-val{font-size:14px;color:#f1f5f9;font-weight:600}
 </style></head>
 <body><div class="cert">
-  <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+  <div class="corner tl"></div><div class="corner tr"></div>
+  <div class="corner bl"></div><div class="corner br"></div>
   <div class="logo">Skilnex — Pakistan's #1 Skill Platform</div>
   <div class="title">Certificate</div>
   <div class="subtitle">of Course Completion</div>
   <div class="divider"></div>
   <div class="presented">This is to certify that</div>
-  <div class="name">${user?.name || "Student"}</div>
+  <div class="name">${userName}</div>
   <div class="course-label">has successfully completed</div>
   <div class="course">${course.title}</div>
   <div class="category">${course.category}</div>
@@ -138,637 +89,222 @@ export default function Dashboard() {
   <div class="footer">
     <div><div class="sig-name">Skilnex Team</div><div class="sig-role">Course Instructor</div></div>
     <div class="stamp"><div class="stamp-text">SKILNEX<br/>CERTIFIED<br/>✓</div></div>
-    <div style="text-align:right"><div class="date-label">Date of Completion</div><div class="date-val">${dateStr}</div></div>
+    <div style="text-align:right">
+      <div class="date-label">Date of Completion</div>
+      <div class="date-val">${dateStr}</div>
+    </div>
   </div>
 </div></body></html>`;
-    const win = window.open("", "_blank");
-    if (win) { win.document.write(html); win.document.close(); setTimeout(() => win.print(), 800); }
-  };
+}
 
-  const categoryColors: Record<string, string> = {
-    Programming: "bg-blue-500/20 text-blue-300 border-blue-500/30",
-    Business: "bg-green-500/20 text-green-300 border-green-500/30",
-    Marketing: "bg-orange-500/20 text-orange-300 border-orange-500/30",
-    Design: "bg-purple-500/20 text-purple-300 border-purple-500/30",
-    "AI/ML": "bg-pink-500/20 text-pink-300 border-pink-500/30",
-    "Web Development": "bg-blue-500/20 text-blue-300 border-blue-500/30",
-    "Digital Marketing": "bg-orange-500/20 text-orange-300 border-orange-500/30",
-    "Freelancing & Agency": "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
-    "Design & Creative Skills": "bg-purple-500/20 text-purple-300 border-purple-500/30",
-    "AI & Automation": "bg-pink-500/20 text-pink-300 border-pink-500/30",
-  };
+// ── Dashboard ──────────────────────────────────────────────────────────────
+export default function Dashboard() {
+  const [, setLocation] = useLocation();
+  const { user, logout, updateUser } = useAuth();
+  const { toast } = useToast();
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
 
-  const completedCount = progressList.filter((p) => p.is_completed).length;
-  const inProgressCount = progressList.filter((p) => !p.is_completed && (p.lessons_completed ?? 0) > 0).length;
+  // ── Data fetching ──
+  const { data: courses = [], isLoading: coursesLoading } = useQuery<Course[]>({
+    queryKey: ["/api/courses"],
+  });
+  const { data: progressList = [] } = useQuery<ProgressType[]>({
+    queryKey: ["/api/progress"],
+  });
+  const { data: skillScore } = useQuery<SkillScore | null>({
+    queryKey: ["/api/skills"],
+  });
+  const { data: priceSetting } = useQuery<{ subscription_price: number }>({
+    queryKey: ["/api/settings/price"],
+  });
+  const { data: giveawayStats } = useQuery<{
+    activeUsers: number;
+    nextMilestone: number;
+    prevMilestone: number;
+  }>({
+    queryKey: ["/api/giveaway/stats"],
+    staleTime: 1000 * 60 * 5,
+  });
+
+  // ── Derived state ──
+  const price = priceSetting?.subscription_price ?? 750;
+  const premium = checkPremium(user);
+  const hasAssessment = !!(skillScore?.goal);
+  const completedCount = useMemo(() => countCompleted(progressList), [progressList]);
+  const inProgressCount = useMemo(() => countInProgress(progressList), [progressList]);
   const totalCourses = courses.length;
 
-  const primarySkill = roadmapSkills[0] || "";
-  const skillLabel = primarySkill
-    ? primarySkill.split(" ").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
-    : "Your Skill";
+  const premiumCount = giveawayStats?.activeUsers ?? 0;
+  const isPhase2 = premiumCount >= 300;
 
-  const firstClientSteps = [
-    { step: "01", title: `${skillLabel} Portfolio Banao`, body: `${skillLabel} ke 2-3 sample projects banao — real clients na hon to fictional ya self-initiated projects bhi chalte hain. Ek clean PDF ya website pe showcase karo.`, color: "from-blue-600 to-blue-700", icon: "🗂️" },
-    { step: "02", title: "Fiverr / Upwork Gig Launch Karo", body: `${skillLabel} service ka ek strong gig banao. Shuru mein competitive rate rakho, aur pehle 1-2 free ya discounted orders se 5-star reviews collect karo.`, color: "from-purple-600 to-purple-700", icon: "🚀" },
-    { step: "03", title: "Local Businesses Ko Approach Karo", body: `Apne sheher ke businesses ko WhatsApp ya direct message karo. Batao ke tum unki ${skillLabel} problems solve kar sakte ho. Ek free audit ya sample offer karo.`, color: "from-emerald-600 to-emerald-700", icon: "🏪" },
-    { step: "04", title: "Facebook Groups & LinkedIn Use Karo", body: `${skillLabel} se related Facebook groups join karo. Roz ek helpful post ya answer daalo. Jab log tumhari expertise dekhein ge, woh khud DM karein ge.`, color: "from-orange-600 to-orange-700", icon: "📱" },
-    { step: "05", title: "Cold Outreach Script", body: `"Hi [Name], maine aapki [profile/website] dekhi — aapko ${skillLabel} mein [specific problem] hai. Main help kar sakta/sakti hoon. Kya 10 min call ho sakti hai?" Short aur specific rakho.`, color: "from-pink-600 to-pink-700", icon: "✉️" },
-    { step: "06", title: "Referrals Maango", body: `Jab pehla client mil jaye aur kaam achha ho, poochho: 'Kya aap mujhe kisi aur ke saath refer kar sakte hain?' Word-of-mouth fastest aur free growth hack hai.`, color: "from-cyan-600 to-cyan-700", icon: "🤝" },
-  ];
+  // ── Roadmap ──
+  const roadmap = useMemo(() => parseRoadmap(skillScore), [skillScore]);
+  const roadmapSkills = useMemo(() => extractRoadmapSkills(skillScore), [skillScore]);
 
-  let savedRoadmap: {
-    recommended_courses?: string[]; career_paths?: string[];
-    expected_income?: string; timeline?: string; learning_order?: string[];
-    skill_level?: string; skill_score?: number; motivation?: string;
-  } | null = null;
+  const tagMatchFn = useCallback(
+    (course: Course) => isTagMatch(course, roadmapSkills),
+    [roadmapSkills]
+  );
 
-  if (skillScore?.roadmap_result) {
+  const sortedCourses = useMemo(
+    () => sortCoursesByRoadmap(courses, roadmapSkills),
+    [courses, roadmapSkills]
+  );
+
+  const hasRoadmapMatches = roadmapSkills.length > 0 && courses.some((c) => tagMatchFn(c));
+  const skillLabel = useMemo(() => getSkillLabel(roadmapSkills), [roadmapSkills]);
+  const firstClientSteps = useMemo(() => buildFirstClientSteps(skillLabel), [skillLabel]);
+
+  // ── Handlers ──
+  const handleRefreshUser = useCallback(async () => {
     try {
-      const raw = JSON.parse(skillScore.roadmap_result);
-      savedRoadmap = {
-        ...raw,
-        recommended_courses: toArray(raw.recommended_courses),
-        career_paths: toArray(raw.career_paths),
-        learning_order: toArray(raw.learning_order),
-      };
-    } catch {}
-  }
+      const res = await fetch("/api/auth/me", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("byonsoft_token")}`,
+        },
+      });
+      const u = await res.json();
+      if (u.id) updateUser(u);
+    } catch {
+      toast({ title: "Refresh failed", variant: "destructive" });
+    }
+  }, [updateUser, toast]);
 
-  const stepColors = ["#3b82f6", "#22c55e", "#f59e0b", "#a855f7", "#ef4444", "#06b6d4"];
+  const handleOpenCourse = useCallback(
+    (course: Course) => {
+      if (!premium) {
+        setUpgradeOpen(true);
+      } else {
+        setLocation(`/course/${course.id}`);
+      }
+    },
+    [premium, setLocation]
+  );
 
+  const handleDownloadCert = useCallback(
+    (course: Course) => {
+      const html = generateCertificateHTML(user?.name || "Student", course);
+      const win = window.open("", "_blank");
+      if (win) {
+        win.document.write(html);
+        win.document.close();
+        setTimeout(() => win.print(), 800);
+      }
+    },
+    [user?.name]
+  );
+
+  const handleLogout = useCallback(() => {
+    logout();
+    window.location.href = "/";
+  }, [logout]);
+
+  const openUpgrade = useCallback(() => setUpgradeOpen(true), []);
+  const closeUpgrade = useCallback(() => setUpgradeOpen(false), []);
+
+  // ── Render ──
   return (
-    <div className="min-h-screen bg-[#0F172A] text-white">
-
-      {/* ── HEADER ── */}
-      <header className="border-b border-slate-800/80 bg-slate-900/90 backdrop-blur-md sticky top-0 z-40 shadow-lg shadow-black/20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shadow-md shadow-blue-900/40">
-              <GraduationCap className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <p className="font-bold text-white leading-none text-lg">Skilnex</p>
-              <p className="text-slate-500 text-xs">Pakistan's Skill Platform</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge className={user?.subscription_status ? "bg-green-900/40 text-green-300 border-green-600/30" : "bg-red-900/40 text-red-300 border-red-600/30"}>
-              {user?.subscription_status ? "Premium Active" : "Free Account"}
-            </Badge>
-            <a href="https://wa.me/923124494267?text=Hi%20Skilnex%20Support!" target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-semibold text-xs px-3 py-1.5 rounded-lg transition-all">
-              <MessageCircle className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">WhatsApp</span>
-            </a>
-            {user?.subscription_status ? (
-              <Button size="sm" onClick={() => setLocation("/course/1")} className="bg-purple-600 hover:bg-purple-500 text-white text-xs px-3">
-                <Brain className="w-3.5 h-3.5 mr-1" /><span className="hidden sm:inline">AI Mentor</span><span className="sm:hidden">AI</span>
-              </Button>
-            ) : (
-              <Button size="sm" onClick={() => setUpgradeOpen(true)} className="bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs px-3 border border-slate-600">
-                <Lock className="w-3 h-3 mr-1" /><Brain className="w-3.5 h-3.5 mr-1" /><span className="hidden sm:inline">AI Mentor</span>
-              </Button>
-            )}
-            <Link href="/profile">
-              <Button size="sm" variant="ghost" className="text-slate-400 hover:text-white">
-                <User className="w-4 h-4 mr-1.5" /><span className="hidden sm:inline">Profile</span>
-              </Button>
-            </Link>
-            <Button size="sm" variant="ghost" onClick={() => { logout(); window.location.href = "/"; }} className="text-slate-400 hover:text-white">
-              <LogOut className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-[#0B1120] text-white">
+      {/* Header */}
+      <DashboardHeader
+        userName={user?.name ?? ""}
+        isPremium={premium}
+        onUpgrade={openUpgrade}
+        onAIMentor={() => setLocation("/course/1")}
+        onLogout={handleLogout}
+      />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
-
+        {/* PWA install */}
         <PWAInstallButton variant="banner" />
 
-        {/* ── WELCOME + COURSE COUNT ── */}
-        <div className="bg-gradient-to-r from-blue-900/50 to-slate-800/50 rounded-2xl p-5 sm:p-7 border border-blue-800/30">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="min-w-0">
-              <h1 className="text-lg sm:text-2xl font-bold text-white truncate">
-                Welcome back, <span className="text-blue-400">{user?.name}</span> 👋
-              </h1>
-              <p className="text-slate-400 text-xs sm:text-sm mt-1">Continue your high-income skill journey</p>
-              {/* ── COURSE COUNT BANNER ── */}
-              {totalCourses > 0 && (
-                <div className="flex items-center gap-2 mt-2">
-                  <BookOpen className="w-3.5 h-3.5 text-blue-400" />
-                  <span className="text-blue-300 text-xs font-semibold">
-                    {totalCourses} courses available — {completedCount} completed, {totalCourses - completedCount} remaining
-                  </span>
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {!user?.subscription_status && (
-                <Button size="sm" onClick={() => setUpgradeOpen(true)} className="bg-gradient-to-r from-blue-600 to-blue-700 text-white font-semibold text-xs px-3">
-                  <Zap className="w-3.5 h-3.5 mr-1" /><span className="hidden sm:inline">Upgrade </span>Rs. {price}
-                </Button>
-              )}
-              <Button size="sm" variant="ghost" onClick={refreshUser} className="border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800 px-2.5" title="Refresh Status">
-                <Activity className="w-4 h-4" /><span className="hidden sm:inline ml-1.5 text-xs">Refresh</span>
-              </Button>
-            </div>
-          </div>
-        </div>
+        {/* Welcome */}
+        <WelcomeHero
+          userName={user?.name ?? ""}
+          isPremium={premium}
+          price={price}
+          totalCourses={totalCourses}
+          completedCount={completedCount}
+          onUpgrade={openUpgrade}
+          onRefresh={handleRefreshUser}
+        />
 
-        {/* ── FREE USER UPGRADE BANNER ── */}
-        {!user?.subscription_status && (
-          <div className="relative overflow-hidden rounded-2xl border border-yellow-500/40 bg-gradient-to-r from-yellow-900/30 via-orange-900/20 to-slate-800/50 p-4 sm:p-5">
-            <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-yellow-500 to-orange-400" />
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="w-10 h-10 rounded-xl bg-yellow-500/20 flex items-center justify-center shrink-0">
-                <Zap className="w-5 h-5 text-yellow-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-white font-bold text-sm">🔓 {totalCourses} Premium Courses Unlock Karo — Sirf Rs. {price}/month</p>
-                <p className="text-slate-400 text-xs mt-0.5">AI Mentor + All Courses + Giveaway Entry + Certificate — sab ek subscription mein</p>
-              </div>
-              <Button onClick={() => setUpgradeOpen(true)} className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-black font-bold text-sm px-5 shrink-0">
-                Abhi Upgrade Karo →
-              </Button>
-            </div>
-          </div>
-        )}
+        {/* Stats row */}
+        <StatsOverview
+          isPhase2={isPhase2}
+          completedCount={completedCount}
+          totalCourses={totalCourses}
+          hasAssessment={hasAssessment}
+          inProgressCount={inProgressCount}
+          onAssessmentClick={() => setLocation("/skill-test?new=1")}
+        />
 
-        {/* ── STATS ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <Card className={`relative overflow-hidden ${isPhase2 ? "bg-gradient-to-br from-purple-900/40 to-slate-800/50 border-purple-600/50" : "bg-gradient-to-br from-yellow-900/30 to-slate-800/50 border-yellow-600/50"}`}>
-            <div className={`absolute inset-x-0 top-0 h-0.5 ${isPhase2 ? "bg-gradient-to-r from-purple-500 to-blue-500" : "bg-gradient-to-r from-yellow-500 to-orange-500"}`} />
-            <CardContent className="p-3 sm:p-4">
-              <div className="flex items-center gap-2">
-                <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 ${isPhase2 ? "bg-purple-600/30" : "bg-yellow-600/20"}`}>
-                  <Trophy className={`w-4 h-4 sm:w-5 sm:h-5 ${isPhase2 ? "text-purple-300" : "text-yellow-400"}`} />
-                </div>
-                <div className="min-w-0">
-                  <p className={`text-xs sm:text-sm font-bold truncate ${isPhase2 ? "text-purple-200" : "text-yellow-300"}`}>{isPhase2 ? "Rs. 1 Lakh" : "Rs. 35,000"}</p>
-                  <p className={`text-xs truncate ${isPhase2 ? "text-purple-400" : "text-yellow-600"}`}>{isPhase2 ? "Mega Giveaway" : "Phase 1 Giveaway"}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        {/* AI Roadmap */}
+        <AIRoadmapSection
+          roadmap={roadmap}
+          onImprove={() => setLocation("/skill-test?new=1")}
+          onGetRoadmap={() => setLocation("/skill-test?new=1")}
+        />
 
-          {/* Completed */}
-          <Card className="bg-slate-800/50 border-slate-700/60">
-            <CardContent className="p-3 sm:p-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-green-600/20 flex items-center justify-center shrink-0">
-                  <Award className="w-4 h-4 sm:w-5 sm:h-5 text-green-400" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xl sm:text-2xl font-bold text-white leading-none">{completedCount}<span className="text-slate-500 text-sm font-normal">/{totalCourses}</span></p>
-                  <p className="text-slate-400 text-[10px] sm:text-xs mt-0.5">Completed</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        {/* First Client Guide */}
+        <FirstClientGuide
+          steps={firstClientSteps}
+          skillLabel={skillLabel}
+          isPremium={premium}
+          price={price}
+          onUpgrade={openUpgrade}
+        />
 
-          {/* AI Assessment */}
-          <Card className="bg-slate-800/50 border-slate-700/60 cursor-pointer hover:border-purple-500/40 transition-colors" onClick={() => !hasAssessment && setLocation("/skill-test?new=1")}>
-            <CardContent className="p-3 sm:p-4">
-              <div className="flex items-center gap-2">
-                <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 ${hasAssessment ? "bg-green-600/20" : "bg-yellow-600/20"}`}>
-                  <Star className={`w-4 h-4 sm:w-5 sm:h-5 ${hasAssessment ? "text-green-400" : "text-yellow-400"}`} />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xl sm:text-2xl font-bold text-white leading-none">{hasAssessment ? "✓" : "?"}</p>
-                  <p className="text-slate-400 text-[10px] sm:text-xs mt-0.5">{hasAssessment ? "AI Done" : "Take Test"}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Giveaway banner */}
+        <MegaLaunchBanner isPremium={premium} onUpgrade={openUpgrade} />
 
-          {/* In Progress */}
-          <Card className="bg-slate-800/50 border-slate-700/60">
-            <CardContent className="p-3 sm:p-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-purple-600/20 flex items-center justify-center shrink-0">
-                  <PlayCircle className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xl sm:text-2xl font-bold text-white leading-none">{inProgressCount}</p>
-                  <p className="text-slate-400 text-[10px] sm:text-xs mt-0.5">In Progress</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* ── AI ROADMAP ── */}
-        {savedRoadmap && (savedRoadmap.recommended_courses?.length ?? 0) > 0 ? (
-          <div className="space-y-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center shadow-lg shadow-purple-900/40">
-                  <Brain className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-white">Your AI Career Roadmap</h2>
-                  <p className="text-slate-500 text-xs">Personalized by Skilnex AI</p>
-                </div>
-              </div>
-              <Button size="sm" variant="outline" onClick={() => setLocation("/skill-test?new=1")}
-                className="border-purple-500/40 text-purple-300 hover:bg-purple-900/30 text-xs gap-1.5">
-                <Sparkles className="w-3.5 h-3.5" /> Improve Roadmap
-              </Button>
-            </div>
-
-            {(savedRoadmap.skill_score || savedRoadmap.skill_level) && (
-              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-purple-900/50 via-blue-900/40 to-slate-800/50 border border-purple-500/30 p-5">
-                <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-purple-500 via-blue-400 to-cyan-400" />
-                <div className="flex items-center gap-5">
-                  {savedRoadmap.skill_score && (
-                    <div className="w-16 h-16 rounded-2xl bg-slate-900/60 border border-purple-500/30 flex flex-col items-center justify-center shrink-0">
-                      <span className="text-2xl font-black text-white leading-none">{savedRoadmap.skill_score}</span>
-                      <span className="text-[10px] text-slate-400">/100</span>
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    {savedRoadmap.skill_level && (
-                      <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full border mb-1.5
-                        ${savedRoadmap.skill_level === "Beginner" ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
-                        : savedRoadmap.skill_level === "Advanced" ? "bg-green-500/20 text-green-300 border-green-500/30"
-                        : "bg-blue-500/20 text-blue-300 border-blue-500/30"}`}>
-                        <Award className="w-3 h-3" /> {savedRoadmap.skill_level}
-                      </span>
-                    )}
-                    {savedRoadmap.motivation && (
-                      <p className="text-slate-300 text-sm italic leading-relaxed">"{savedRoadmap.motivation}"</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="grid sm:grid-cols-2 gap-4">
-              {(savedRoadmap.career_paths?.length ?? 0) > 0 && (
-                <Card className="bg-slate-800/50 border-slate-700/60 overflow-hidden">
-                  <div className="h-0.5 bg-gradient-to-r from-green-500 to-emerald-400" />
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-7 h-7 rounded-lg bg-green-600/20 flex items-center justify-center">
-                        <Briefcase className="w-3.5 h-3.5 text-green-400" />
-                      </div>
-                      <p className="text-white font-bold text-sm">Career Paths</p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {savedRoadmap.career_paths!.map((p, i) => (
-                        <Badge key={i} className="bg-green-900/30 border-green-600/30 text-green-300 text-xs px-2.5 py-1 font-medium">{p}</Badge>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {savedRoadmap.expected_income && (
-                <Card className="bg-gradient-to-br from-emerald-900/40 to-teal-900/30 border-emerald-600/30 overflow-hidden">
-                  <div className="h-0.5 bg-gradient-to-r from-emerald-500 to-teal-400" />
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-7 h-7 rounded-lg bg-emerald-600/20 flex items-center justify-center">
-                        <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
-                      </div>
-                      <p className="text-emerald-300 text-xs font-bold uppercase tracking-widest">Expected Income</p>
-                    </div>
-                    <p className="text-white text-lg font-black leading-tight">{savedRoadmap.expected_income.split("\n")[0].trim()}</p>
-                    {savedRoadmap.timeline && (
-                      <div className="flex items-center gap-1.5 mt-2">
-                        <Clock className="w-3 h-3 text-teal-400" />
-                        <p className="text-teal-300 text-xs">{savedRoadmap.timeline}</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-
-            {(savedRoadmap.recommended_courses?.length ?? 0) > 0 && (
-              <Card className="bg-slate-800/50 border-slate-700/60 overflow-hidden">
-                <div className="h-0.5 bg-gradient-to-r from-blue-600 to-purple-600" />
-                <CardContent className="p-5">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="w-7 h-7 rounded-lg bg-blue-600/20 flex items-center justify-center">
-                      <BookOpen className="w-3.5 h-3.5 text-blue-400" />
-                    </div>
-                    <p className="text-white font-bold text-sm">Recommended Courses</p>
-                  </div>
-                  <div className="grid sm:grid-cols-2 gap-2.5">
-                    {savedRoadmap.recommended_courses!.map((c, i) => (
-                      <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-slate-700/40 border border-slate-600/40 hover:border-blue-500/30 transition-colors">
-                        <span className="w-6 h-6 rounded-full bg-blue-600/30 text-blue-300 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
-                        <span className="text-slate-200 text-sm leading-snug">{c}</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {(savedRoadmap.learning_order?.length ?? 0) > 0 && (
-              <Card className="bg-slate-800/50 border-slate-700/60 overflow-hidden">
-                <div className="h-0.5 bg-gradient-to-r from-cyan-500 to-blue-500" />
-                <CardContent className="p-5">
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="w-7 h-7 rounded-lg bg-cyan-600/20 flex items-center justify-center">
-                      <ListOrdered className="w-3.5 h-3.5 text-cyan-400" />
-                    </div>
-                    <p className="text-white font-bold text-sm">Learning Order</p>
-                    <span className="ml-auto text-xs text-slate-500">{savedRoadmap.learning_order!.length} steps</span>
-                  </div>
-                  <div className="space-y-3">
-                    {savedRoadmap.learning_order!.map((step, i) => (
-                      <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-slate-700/30 border border-slate-600/30 hover:bg-slate-700/50 transition-colors">
-                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 border-2"
-                          style={{ borderColor: stepColors[i % stepColors.length], color: stepColors[i % stepColors.length] }}>
-                          {i + 1}
-                        </div>
-                        <p className="text-slate-200 text-sm leading-relaxed pt-0.5">{step}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-4 flex items-center gap-2 p-3 rounded-xl bg-blue-600/10 border border-blue-500/20">
-                    <Target className="w-4 h-4 text-blue-400 shrink-0" />
-                    <p className="text-blue-300 text-xs">Ek step complete karo, phir agli — consistency hi success hai!</p>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
-        ) : (
-          <div className="relative overflow-hidden rounded-2xl border border-purple-500/40 bg-gradient-to-br from-purple-900/60 via-blue-900/50 to-slate-900/80 p-8 text-center">
-            <div className="absolute inset-0 opacity-20 bg-gradient-to-br from-purple-900/40 to-blue-900/40 rounded-2xl" />
-            <div className="relative z-10 space-y-4">
-              <div className="w-14 h-14 rounded-2xl bg-purple-600/40 border border-purple-500/50 flex items-center justify-center mx-auto">
-                <Brain className="w-8 h-8 text-purple-300" />
-              </div>
-              <h2 className="text-2xl sm:text-3xl font-bold text-white">AI Skill Test & Career Roadmap</h2>
-              <p className="text-slate-300 text-base max-w-xl mx-auto">
-                Apna background batao — AI tumhare liye personalized career roadmap banaye ga with recommended courses, career paths, aur income estimates!
-              </p>
-              <Button size="lg" onClick={() => setLocation("/skill-test?new=1")}
-                className="bg-gradient-to-r from-purple-600 to-blue-600 text-white font-bold text-base px-8 py-6 rounded-xl shadow-lg shadow-purple-900/40">
-                <Brain className="w-5 h-5 mr-2" /> Get My Free Roadmap
-              </Button>
-              <div className="flex items-center justify-center gap-6 pt-1 text-slate-400 text-sm">
-                <span className="flex items-center gap-1"><CheckCircle className="w-4 h-4 text-green-400" /> Sirf 2 minute</span>
-                <span className="flex items-center gap-1"><CheckCircle className="w-4 h-4 text-green-400" /> 100% Free</span>
-                <span className="flex items-center gap-1"><CheckCircle className="w-4 h-4 text-green-400" /> AI Powered</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── FIRST CLIENT GUIDE ── */}
-        <div>
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-xl bg-emerald-600/30 flex items-center justify-center">
-              <Rocket className="w-4 h-4 text-emerald-400" />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-white">🚀 How to Get Your First Client</h2>
-              {primarySkill && <p className="text-emerald-400 text-xs font-medium mt-0.5">Personalized for: {skillLabel}</p>}
-            </div>
-          </div>
-          <div className="relative rounded-2xl overflow-hidden border border-emerald-700/30 bg-slate-800/50">
-            <div className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500" />
-            <div className={`p-6 space-y-4 transition-all duration-300 ${!user?.subscription_status ? "blur-[10px] select-none pointer-events-none" : ""}`}>
-              {firstClientSteps.map((item) => (
-                <div key={item.step} className="flex gap-4 p-3 rounded-xl hover:bg-slate-700/30 transition-colors">
-                  <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${item.color} flex items-center justify-center shrink-0 text-lg shadow-lg`}>{item.icon}</div>
-                  <div>
-                    <span className="text-xs font-bold text-slate-500">STEP {item.step}</span>
-                    <p className="text-white font-semibold text-sm mb-1">{item.title}</p>
-                    <p className="text-slate-400 text-sm leading-relaxed">{item.body}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {!user?.subscription_status && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-slate-900/50 backdrop-blur-sm">
-                <div className="text-center space-y-2">
-                  <div className="w-12 h-12 rounded-2xl bg-emerald-600/30 border border-emerald-500/40 flex items-center justify-center mx-auto mb-3">
-                    <Lock className="w-6 h-6 text-emerald-400" />
-                  </div>
-                  <p className="text-white font-bold text-lg">Premium Content</p>
-                  <p className="text-slate-400 text-sm">Personalized client guide — unlock karo premium mein</p>
-                </div>
-                <Button onClick={() => setUpgradeOpen(true)}
-                  className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold px-6 py-5 text-base shadow-lg shadow-emerald-900/40">
-                  🔓 Unlock for Rs. {price} PKR
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <MegaLaunchBanner isPremium={!!user?.subscription_status} onUpgrade={() => setUpgradeOpen(true)} />
-
+        {/* Referral + Rewards */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <ReferralCard />
           <ReferralRewards />
         </div>
 
-        {/* ── PRICING ── */}
-        {!user?.subscription_status && (
-          <div>
-            <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-4">
-              <Zap className="w-5 h-5 text-blue-400" /> Choose Your Plan
-            </h2>
-            <div className="grid sm:grid-cols-2 gap-4 max-w-2xl">
-              <div className="rounded-2xl border border-slate-700 bg-slate-800/50 p-5">
-                <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Free</p>
-                <p className="text-3xl font-black text-white mb-0.5">Rs. 0</p>
-                <p className="text-slate-500 text-xs mb-4">Always free to explore</p>
-                <ul className="space-y-2 mb-4 text-sm">
-                  {[
-                    { text: "Basic AI Career Roadmap", ok: true },
-                    { text: "Dashboard Access", ok: true },
-                    { text: "AI Mentor Chat", ok: false },
-                    { text: `${totalCourses} Premium Courses`, ok: false },
-                    { text: "Giveaway Tickets", ok: false },
-                  ].map((f) => (
-                    <li key={f.text} className={`flex items-center gap-2 ${f.ok ? "text-slate-300" : "text-slate-600 line-through"}`}>
-                      {f.ok ? <CheckCircle className="w-4 h-4 text-green-400 shrink-0" /> : <XIcon className="w-4 h-4 text-slate-600 shrink-0" />}
-                      {f.text}
-                    </li>
-                  ))}
-                </ul>
-                <div className="text-center text-slate-500 text-xs font-medium py-2">Current Plan</div>
-              </div>
-              <div className="rounded-2xl border border-blue-500/50 bg-gradient-to-br from-blue-900/30 via-slate-800/50 to-purple-900/20 p-5 relative overflow-hidden"
-                style={{ boxShadow: "0 0 40px -10px rgba(59,130,246,0.25)" }}>
-                <div className="absolute top-3 right-3 bg-blue-600 text-white text-xs font-bold px-2.5 py-1 rounded-full">BEST VALUE</div>
-                <p className="text-blue-300 text-xs font-bold uppercase tracking-widest mb-1">Premium</p>
-                <p className="text-3xl font-black text-white mb-0.5">Rs. {price}<span className="text-slate-400 text-sm font-normal">/mo</span></p>
-                <p className="text-slate-400 text-xs mb-1">= Sirf Rs. {Math.round(price / totalCourses)} per course!</p>
-                <p className="text-slate-500 text-xs mb-4">Unlock everything + giveaway entry</p>
-                <ul className="space-y-2 mb-5 text-sm">
-                  {[
-                    "Unlimited AI Mentor Chat",
-                    `${totalCourses} Premium Courses — All Unlocked`,
-                    "Saved AI Career Roadmap",
-                    "Giveaway Ticket (Win Rs. 35,000+)",
-                    "Completion Certificate",
-                  ].map((f) => (
-                    <li key={f} className="flex items-center gap-2 text-slate-200">
-                      <CheckCircle className="w-4 h-4 text-blue-400 shrink-0" /> {f}
-                    </li>
-                  ))}
-                </ul>
-                <Button onClick={() => setUpgradeOpen(true)} className="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-bold">
-                  <Zap className="w-4 h-4 mr-2" /> Upgrade Now
-                </Button>
-              </div>
-            </div>
-          </div>
+        {/* Giveaway tracker */}
+        {giveawayStats && (
+          <GiveawayTracker
+            premiumCount={premiumCount}
+            nextMilestone={giveawayStats.nextMilestone}
+            prevMilestone={giveawayStats.prevMilestone}
+            isPhase2={isPhase2}
+          />
         )}
 
-        {/* ── COURSES ── */}
-        <div>
-          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-blue-400" />
-              All Courses
-              <span className="text-sm font-normal text-slate-400">({totalCourses})</span>
-              {hasRoadmapMatches && (
-                <span className="text-xs font-normal text-purple-400 bg-purple-900/30 border border-purple-700/40 px-2 py-0.5 rounded-full ml-1">
-                  ⭐ Sorted by your roadmap
-                </span>
-              )}
-            </h2>
-          </div>
+        {/* Pricing (free users only) */}
+        {!premium && (
+          <PricingSection
+            price={price}
+            totalCourses={totalCourses}
+            onUpgrade={openUpgrade}
+          />
+        )}
 
-          {completedCount > 0 && totalCourses > completedCount && (
-            <div className="mb-4 flex items-center gap-3 p-3 rounded-xl bg-blue-900/20 border border-blue-700/30">
-              <ChevronRight className="w-4 h-4 text-blue-400 shrink-0" />
-              <p className="text-blue-300 text-sm font-medium">
-                Aapne {completedCount} course{completedCount > 1 ? "s" : ""} complete ki! — {totalCourses - completedCount} aur courses aapka intezaar kar rahi hain 🚀
-              </p>
-            </div>
-          )}
-
-          {!user?.subscription_status && (
-            <div className="mb-4 p-3 rounded-lg bg-yellow-900/20 border border-yellow-700/30 flex items-center gap-3">
-              <Lock className="w-5 h-5 text-yellow-400 shrink-0" />
-              <p className="text-yellow-300 text-sm">Upgrade to Premium (Rs. {price}/month) to unlock all {totalCourses} courses</p>
-              <Button size="sm" onClick={() => setUpgradeOpen(true)} className="ml-auto bg-yellow-600 text-white shrink-0">Upgrade</Button>
-            </div>
-          )}
-
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {coursesLoading
-              ? Array(6).fill(0).map((_, i) => (
-                  <Card key={i} className="bg-slate-800/50 border-slate-700">
-                    <CardContent className="p-5 space-y-3">
-                      <Skeleton className="h-4 w-3/4 bg-slate-700" />
-                      <Skeleton className="h-3 w-1/2 bg-slate-700" />
-                      <Skeleton className="h-2 w-full bg-slate-700" />
-                    </CardContent>
-                  </Card>
-                ))
-              : sortedCourses.map((course) => {
-                  const prog = getProgress(course.id);
-                  const isLocked = !user?.subscription_status;
-                  const isCompleted = prog?.is_completed === true;
-                  const lessonsCompleted = prog?.lessons_completed ?? 0;
-                  const totalLessons = (course as any).lesson_count || (course as any).lessons_count || 10;
-                  const progressPct = prog ? Math.min(100, (lessonsCompleted / totalLessons) * 100) : 0;
-                  const isRecommended = isTagMatch(course);
-
-                  return (
-                    <Card key={course.id}
-                      className={`relative group transition-all duration-300 cursor-pointer overflow-hidden
-                        ${isRecommended ? "bg-gradient-to-br from-purple-900/20 via-slate-800/60 to-slate-800/50 border-purple-500/50 hover:-translate-y-1 hover:shadow-xl hover:shadow-purple-900/30"
-                        : isLocked ? "bg-slate-800/50 border-slate-700/60 opacity-75 hover:border-yellow-600/30 hover:opacity-100"
-                        : isCompleted ? "bg-slate-800/50 border-green-600/40 hover:border-green-500/60 hover:-translate-y-1 hover:shadow-xl hover:shadow-green-900/20"
-                        : "bg-slate-800/50 border-slate-700/60 hover:border-blue-500/40 hover:-translate-y-1 hover:shadow-xl hover:shadow-blue-900/20"}`}
-                      onClick={() => { if (isLocked) setUpgradeOpen(true); else setLocation(`/course/${course.id}`); }}>
-
-                      {isRecommended && <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-500 via-blue-400 to-purple-500" />}
-                      {!isRecommended && isCompleted && <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-green-500 to-emerald-400" />}
-
-                      <CardContent className="p-5">
-                        <div className="flex items-start justify-between gap-2 mb-3">
-                          <div className="flex flex-col gap-1.5">
-                            <Badge className={`text-xs w-fit ${categoryColors[course.category] || "bg-slate-700/60 text-slate-300 border-slate-600"}`}>
-                              {course.category}
-                            </Badge>
-                            {isRecommended && (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-200 bg-purple-900/40 border border-purple-500/40 px-2 py-0.5 rounded-full w-fit">
-                                ⭐ Recommended
-                              </span>
-                            )}
-                          </div>
-                          {isLocked ? <Lock className="w-4 h-4 text-slate-500 shrink-0" />
-                            : isCompleted ? <Award className="w-4 h-4 text-green-400 shrink-0" />
-                            : <ChevronRight className={`w-4 h-4 shrink-0 transition-colors ${isRecommended ? "text-purple-400 group-hover:text-purple-300" : "text-slate-500 group-hover:text-blue-400"}`} />}
-                        </div>
-
-                        <h3 className={`font-semibold mb-1 leading-snug transition-colors text-sm ${isRecommended ? "text-white group-hover:text-purple-100" : "text-white group-hover:text-blue-100"}`}>
-                          {course.title}
-                        </h3>
-                        <p className="text-slate-400 text-xs mb-4 line-clamp-2">{course.description}</p>
-
-                        <div className="space-y-1.5 mb-3">
-                          <div className="flex justify-between text-xs text-slate-400">
-                            <span>Progress</span>
-                            <span className={isCompleted ? "text-green-400 font-medium" : ""}>
-                              {isCompleted ? "✓ Completed!" : `${lessonsCompleted} lessons done`}
-                            </span>
-                          </div>
-                          <Progress value={isCompleted ? 100 : progressPct} className={`h-1.5 ${isCompleted ? "bg-slate-700 [&>div]:bg-green-500" : "bg-slate-700"}`} />
-                        </div>
-
-                        {isCompleted && !isLocked && (
-                          <Button size="sm"
-                            className="w-full bg-gradient-to-r from-green-700 to-emerald-600 hover:from-green-600 hover:to-emerald-500 text-white font-medium text-xs gap-1.5 mt-1"
-                            onClick={(e) => { e.stopPropagation(); downloadCertificate(course); }}>
-                            <Download className="w-3.5 h-3.5" /> Download Certificate
-                          </Button>
-                        )}
-                        {isLocked && (
-                          <div className="mt-3 text-center">
-                            <span className="text-xs text-yellow-400 font-medium flex items-center justify-center gap-1">
-                              <Lock className="w-3 h-3" /> Unlock with Premium — Rs. {price}/mo
-                            </span>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-          </div>
-        </div>
+        {/* Courses */}
+        <CoursesGrid
+          courses={sortedCourses}
+          progressList={progressList}
+          isLoading={coursesLoading}
+          isPremium={premium}
+          price={price}
+          completedCount={completedCount}
+          totalCourses={totalCourses}
+          hasRoadmapMatches={hasRoadmapMatches}
+          isTagMatch={tagMatchFn}
+          onOpen={handleOpenCourse}
+          onDownloadCert={handleDownloadCert}
+          onUpgrade={openUpgrade}
+        />
       </main>
 
-      {/* ── FOOTER ── */}
-      <footer className="border-t border-slate-800/60 bg-slate-900 mt-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center">
-                <GraduationCap className="w-4 h-4 text-white" />
-              </div>
-              <div>
-                <p className="text-white font-semibold text-sm">Skilnex</p>
-                <p className="text-slate-500 text-xs">Pakistan's #1 Skill Platform</p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center justify-center gap-5 text-slate-400 text-sm">
-              <Link href="/contact" className="hover:text-white transition-colors flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> Contact Us</Link>
-              <Link href="/privacy" className="hover:text-white transition-colors flex items-center gap-1.5"><ShieldIcon className="w-3.5 h-3.5" /> Privacy Policy</Link>
-              <Link href="/terms" className="hover:text-white transition-colors flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> Terms & Conditions</Link>
-            </div>
-            <p className="text-slate-600 text-xs">© {new Date().getFullYear()} Skilnex. All rights reserved.</p>
-          </div>
-        </div>
-      </footer>
+      {/* Footer */}
+      <DashboardFooter />
 
-      <UpgradeModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
+      {/* Upgrade modal */}
+      <UpgradeModal open={upgradeOpen} onClose={closeUpgrade} />
     </div>
   );
 }

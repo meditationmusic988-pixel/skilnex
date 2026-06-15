@@ -1,0 +1,9 @@
+export { DashboardHeader } from "./DashboardHeader";
+export { WelcomeHero } from "./WelcomeHero";
+export { StatsOverview } from "./StatsOverview";
+export { AIRoadmapSection } from "./AIRoadmapSection";
+export { FirstClientGuide } from "./FirstClientGuide";
+export { CoursesGrid } from "./CoursesGrid";
+export { PricingSection } from "./PricingSection";
+export { GiveawayTracker } from "./GiveawayTracker";
+export { DashboardFooter } from "./DashboardFooter";
