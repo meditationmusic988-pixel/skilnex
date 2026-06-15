@@ -1,100 +1,96 @@
 import React from "react";
-import { Link } from "wouter";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { GraduationCap, MessageCircle, Brain, Lock, User, LogOut } from "lucide-react";
+import { BookOpen, Zap, Activity } from "lucide-react";
 
-interface DashboardHeaderProps {
+interface WelcomeHeroProps {
   userName: string;
   isPremium: boolean;
+  price: number;
+  totalCourses: number;
+  completedCount: number;
   onUpgrade: () => void;
-  onAIMentor: () => void;
-  onLogout: () => void;
+  onRefresh: () => void;
 }
 
-export const DashboardHeader = React.memo(function DashboardHeader({
+export const WelcomeHero = React.memo(function WelcomeHero({
   userName,
   isPremium,
+  price,
+  totalCourses,
+  completedCount,
   onUpgrade,
-  onAIMentor,
-  onLogout,
-}: DashboardHeaderProps) {
+  onRefresh,
+}: WelcomeHeroProps) {
   return (
-    <header className="border-b border-white/[0.06] bg-slate-900/80 backdrop-blur-xl sticky top-0 z-40">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between gap-4">
-        {/* Brand */}
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md shadow-blue-900/40">
-            <GraduationCap className="w-4 h-4 text-white" />
-          </div>
-          <div className="hidden sm:block">
-            <p className="font-bold text-white text-sm leading-none tracking-tight">Skilnex</p>
-            <p className="text-slate-500 text-[10px] mt-0.5">Pakistan's Skill Platform</p>
-          </div>
+    <div className="relative overflow-hidden rounded-2xl border border-white/[0.07] bg-gradient-to-br from-slate-800/80 via-slate-800/60 to-blue-900/20 p-6 sm:p-8">
+      {/* Subtle glow */}
+      <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-blue-600/10 blur-3xl pointer-events-none" />
+
+      <div className="relative flex items-start justify-between gap-4 flex-wrap">
+        <div className="min-w-0">
+          <p className="text-slate-400 text-sm mb-1">Welcome back</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white leading-tight truncate">
+            {userName} 👋
+          </h1>
+          <p className="text-slate-400 text-sm mt-2">
+            Continue your high-income skill journey
+          </p>
+          {totalCourses > 0 && (
+            <div className="flex items-center gap-2 mt-3 bg-blue-900/20 border border-blue-800/30 rounded-lg px-3 py-1.5 w-fit">
+              <BookOpen className="w-3.5 h-3.5 text-blue-400" />
+              <span className="text-blue-300 text-xs font-medium">
+                {completedCount}/{totalCourses} courses completed
+              </span>
+            </div>
+          )}
         </div>
 
-        {/* Nav Actions */}
-        <div className="flex items-center gap-2">
-          <Badge
-            className={`text-[10px] px-2 py-0.5 font-semibold border ${
-              isPremium
-                ? "bg-emerald-900/40 text-emerald-300 border-emerald-600/30"
-                : "bg-slate-800 text-slate-400 border-slate-700"
-            }`}
-          >
-            {isPremium ? "Premium" : "Free"}
-          </Badge>
-
-          <a
-            href="https://wa.me/923124494267?text=Hi%20Skilnex%20Support!"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-600 active:scale-95 text-white font-semibold text-xs px-3 py-1.5 rounded-lg transition-all"
-          >
-            <MessageCircle className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Support</span>
-          </a>
-
-          {isPremium ? (
-            <Button
-              size="sm"
-              onClick={onAIMentor}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 h-8"
-            >
-              <Brain className="w-3.5 h-3.5 mr-1.5" />
-              <span className="hidden sm:inline">AI Mentor</span>
-              <span className="sm:hidden">AI</span>
-            </Button>
-          ) : (
+        <div className="flex items-center gap-2 shrink-0">
+          {!isPremium && (
             <Button
               size="sm"
               onClick={onUpgrade}
-              className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-3 h-8 border border-slate-700"
+              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold text-xs px-4 h-9 shadow-lg shadow-blue-900/30"
             >
-              <Lock className="w-3 h-3 mr-1" />
-              <Brain className="w-3.5 h-3.5 mr-1" />
-              <span className="hidden sm:inline">AI Mentor</span>
+              <Zap className="w-3.5 h-3.5 mr-1.5" />
+              Upgrade — Rs. {price}
             </Button>
           )}
-
-          <Link href="/profile">
-            <Button size="sm" variant="ghost" className="text-slate-400 hover:text-white h-8 px-2.5">
-              <User className="w-4 h-4" />
-              <span className="hidden sm:inline ml-1.5 text-xs">Profile</span>
-            </Button>
-          </Link>
-
           <Button
             size="sm"
             variant="ghost"
-            onClick={onLogout}
-            className="text-slate-500 hover:text-slate-300 h-8 px-2.5"
-            title="Sign out"
+            onClick={onRefresh}
+            className="border border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800 h-9 px-3 text-xs gap-1.5"
+            title="Refresh status"
           >
-            <LogOut className="w-4 h-4" />
+            <Activity className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
         </div>
       </div>
-    </header>
+
+      {/* Upgrade nudge for free users */}
+      {!isPremium && (
+        <div className="relative mt-5 pt-5 border-t border-white/[0.06]">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex-1 min-w-0">
+              <p className="text-yellow-300 text-sm font-semibold">
+                🔓 Unlock {totalCourses} Premium Courses — Rs. {price}/month
+              </p>
+              <p className="text-slate-500 text-xs mt-0.5">
+                AI Mentor + All Courses + Giveaway Entry + Certificate
+              </p>
+            </div>
+            <Button
+              onClick={onUpgrade}
+              size="sm"
+              className="bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-black font-bold text-xs px-4 h-8 shrink-0"
+            >
+              Upgrade Now →
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 });
