@@ -123,6 +123,7 @@ export default function Dashboard() {
     staleTime: 1000 * 60 * 5,
   });
 
+
   // ── Derived state ──
   const price = priceSetting?.subscription_price ?? 750;
   const premium = checkPremium(user);
@@ -134,15 +135,21 @@ export default function Dashboard() {
   const premiumCount = giveawayStats?.activeUsers ?? 0;
   const isPhase2 = premiumCount >= 300;
 
-  // ── Roadmap — used by both StatsOverview (score) and AIRoadmapSection ──
+  // ── Roadmap + parsed result for StatsOverview ──
   const roadmap = useMemo(() => parseRoadmap(skillScore), [skillScore]);
+  const roadmapResult = useMemo(() => {
+    if (!skillScore?.roadmap_result) return null;
+    try { return JSON.parse(skillScore.roadmap_result); } catch { return null; }
+  }, [skillScore]);
   const roadmapSkills = useMemo(() => extractRoadmapSkills(skillScore), [skillScore]);
 
+  // ── Matched courses: AI recommended names → actual app courses ──
   const matchedCourses = useMemo(
     () => matchRoadmapCourses(courses, roadmap?.recommended_courses ?? []),
     [courses, roadmap]
   );
 
+  // ── Sort: matched courses top pe, baaki neeche ──
   const sortedCourses = useMemo(() => {
     const matchedIds = new Set(matchedCourses.map((c) => c.id));
     const rest = courses.filter((c) => !matchedIds.has(c.id));
@@ -156,6 +163,8 @@ export default function Dashboard() {
 
   const hasRoadmapMatches = matchedCourses.length > 0;
   const skillLabel = useMemo(() => getSkillLabel(roadmapSkills), [roadmapSkills]);
+
+  // ── First client steps — goal ke basis pe alag ──
   const firstClientSteps = useMemo(
     () => buildFirstClientSteps(skillLabel, skillScore?.goal ?? ""),
     [skillLabel, skillScore?.goal]
@@ -165,7 +174,9 @@ export default function Dashboard() {
   const handleRefreshUser = useCallback(async () => {
     try {
       const res = await fetch("/api/auth/me", {
-        headers: { Authorization: `Bearer ${localStorage.getItem("byonsoft_token")}` },
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("byonsoft_token")}`,
+        },
       });
       const u = await res.json();
       if (u.id) updateUser(u);
@@ -206,8 +217,10 @@ export default function Dashboard() {
   const openUpgrade = useCallback(() => setUpgradeOpen(true), []);
   const closeUpgrade = useCallback(() => setUpgradeOpen(false), []);
 
+  // ── Render ──
   return (
     <div className="min-h-screen bg-[#0B1120] text-white">
+      {/* Header */}
       <DashboardHeader
         userName={user?.name ?? ""}
         isPremium={premium}
@@ -217,8 +230,10 @@ export default function Dashboard() {
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+        {/* PWA install */}
         <PWAInstallButton variant="banner" />
 
+        {/* Welcome */}
         <WelcomeHero
           userName={user?.name ?? ""}
           isPremium={premium}
@@ -229,7 +244,7 @@ export default function Dashboard() {
           onRefresh={handleRefreshUser}
         />
 
-        {/* Stats + full skill test result */}
+        {/* Stats row — career result bhi dikhao */}
         <StatsOverview
           isPhase2={isPhase2}
           completedCount={completedCount}
@@ -237,9 +252,10 @@ export default function Dashboard() {
           hasAssessment={hasAssessment}
           inProgressCount={inProgressCount}
           onAssessmentClick={() => setLocation("/skill-test?new=1")}
-          roadmap={roadmap}
+          result={roadmapResult}
         />
 
+        {/* AI Roadmap — matched courses pass karo */}
         <AIRoadmapSection
           roadmap={roadmap}
           matchedCourses={matchedCourses}
@@ -247,6 +263,7 @@ export default function Dashboard() {
           onGetRoadmap={() => setLocation("/skill-test?new=1")}
         />
 
+        {/* First Client Guide — goal ke basis pe personalized */}
         <FirstClientGuide
           steps={firstClientSteps}
           skillLabel={skillLabel}
@@ -255,13 +272,16 @@ export default function Dashboard() {
           onUpgrade={openUpgrade}
         />
 
+        {/* Giveaway banner */}
         <MegaLaunchBanner isPremium={premium} onUpgrade={openUpgrade} />
 
+        {/* Referral + Rewards */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <ReferralCard />
           <ReferralRewards />
         </div>
 
+        {/* Giveaway tracker */}
         {giveawayStats && (
           <GiveawayTracker
             premiumCount={premiumCount}
@@ -271,6 +291,7 @@ export default function Dashboard() {
           />
         )}
 
+        {/* Pricing (free users only) */}
         {!premium && (
           <PricingSection
             price={price}
@@ -279,6 +300,7 @@ export default function Dashboard() {
           />
         )}
 
+        {/* Courses — sorted with matched on top */}
         <CoursesGrid
           courses={sortedCourses}
           progressList={progressList}
@@ -295,8 +317,12 @@ export default function Dashboard() {
         />
       </main>
 
+      {/* Footer */}
       <DashboardFooter />
+
+      {/* Upgrade modal */}
       <UpgradeModal open={upgradeOpen} onClose={closeUpgrade} />
     </div>
   );
 }
+
