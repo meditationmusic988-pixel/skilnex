@@ -74,6 +74,34 @@ export function sortCoursesByRoadmap(courses: Course[], roadmapSkills: string[])
   return [...matched, ...rest];
 }
 
+// ── NEW: AI recommended names ko actual app courses se match karo ──
+export function matchRoadmapCourses(
+  courses: Course[],
+  recommendedNames: string[]
+): Course[] {
+  if (!recommendedNames.length || !courses.length) return [];
+
+  return recommendedNames
+    .map((name) => {
+      const nameLower = name.toLowerCase().trim();
+      return courses.find((c) => {
+        const titleLower = c.title.toLowerCase();
+        // Exact match
+        if (titleLower === nameLower) return true;
+        // Title contains AI name or AI name contains title
+        if (titleLower.includes(nameLower) || nameLower.includes(titleLower)) return true;
+        // Word-level match (min 4 chars to avoid false positives)
+        return nameLower
+          .split(" ")
+          .filter((w) => w.length > 3)
+          .some((word) => titleLower.includes(word));
+      });
+    })
+    .filter((c): c is Course => !!c)
+    // Remove duplicates
+    .filter((c, i, arr) => arr.findIndex((x) => x.id === c.id) === i);
+}
+
 export function getSkillLabel(roadmapSkills: string[]): string {
   const primary = roadmapSkills[0] || "";
   return primary
