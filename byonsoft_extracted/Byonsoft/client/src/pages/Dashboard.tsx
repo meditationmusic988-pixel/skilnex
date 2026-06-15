@@ -20,22 +20,19 @@ import { DashboardFooter } from "@/components/dashboard/DashboardFooter";
 
 // ── Utils ──
 import { isPremium as checkPremium } from "@/utils/premium";
-import {
-  countCompleted,
-  countInProgress,
-} from "@/utils/progress";
+import { countCompleted, countInProgress } from "@/utils/progress";
 import {
   parseRoadmap,
   extractRoadmapSkills,
   isTagMatch,
-  sortCoursesByRoadmap,
+  matchRoadmapCourses,
   getSkillLabel,
   buildFirstClientSteps,
 } from "@/utils/roadmap";
 
 import type { Course, Progress as ProgressType, SkillScore } from "@shared/schema";
 
-// ── Certificate generator (kept in Dashboard, UI-only concern) ──
+// ── Certificate generator ──
 function generateCertificateHTML(userName: string, course: Course): string {
   const dateStr = new Date().toLocaleDateString("en-PK", {
     year: "numeric",
@@ -97,7 +94,7 @@ function generateCertificateHTML(userName: string, course: Course): string {
 </div></body></html>`;
 }
 
-// ── Dashboard ──────────────────────────────────────────────────────────────
+// ── Dashboard ──
 export default function Dashboard() {
   const [, setLocation] = useLocation();
   const { user, logout, updateUser } = useAuth();
@@ -141,17 +138,25 @@ export default function Dashboard() {
   const roadmap = useMemo(() => parseRoadmap(skillScore), [skillScore]);
   const roadmapSkills = useMemo(() => extractRoadmapSkills(skillScore), [skillScore]);
 
+  // ── Matched courses: AI recommended names → actual app courses ──
+  const matchedCourses = useMemo(
+    () => matchRoadmapCourses(courses, roadmap?.recommended_courses ?? []),
+    [courses, roadmap]
+  );
+
+  // ── Sort: matched courses top pe, baaki neeche ──
+  const sortedCourses = useMemo(() => {
+    const matchedIds = new Set(matchedCourses.map((c) => c.id));
+    const rest = courses.filter((c) => !matchedIds.has(c.id));
+    return [...matchedCourses, ...rest];
+  }, [courses, matchedCourses]);
+
   const tagMatchFn = useCallback(
     (course: Course) => isTagMatch(course, roadmapSkills),
     [roadmapSkills]
   );
 
-  const sortedCourses = useMemo(
-    () => sortCoursesByRoadmap(courses, roadmapSkills),
-    [courses, roadmapSkills]
-  );
-
-  const hasRoadmapMatches = roadmapSkills.length > 0 && courses.some((c) => tagMatchFn(c));
+  const hasRoadmapMatches = matchedCourses.length > 0;
   const skillLabel = useMemo(() => getSkillLabel(roadmapSkills), [roadmapSkills]);
   const firstClientSteps = useMemo(() => buildFirstClientSteps(skillLabel), [skillLabel]);
 
@@ -239,9 +244,10 @@ export default function Dashboard() {
           onAssessmentClick={() => setLocation("/skill-test?new=1")}
         />
 
-        {/* AI Roadmap */}
+        {/* AI Roadmap — matched courses pass karo */}
         <AIRoadmapSection
           roadmap={roadmap}
+          matchedCourses={matchedCourses}
           onImprove={() => setLocation("/skill-test?new=1")}
           onGetRoadmap={() => setLocation("/skill-test?new=1")}
         />
@@ -283,7 +289,7 @@ export default function Dashboard() {
           />
         )}
 
-        {/* Courses */}
+        {/* Courses — sorted with matched on top */}
         <CoursesGrid
           courses={sortedCourses}
           progressList={progressList}
