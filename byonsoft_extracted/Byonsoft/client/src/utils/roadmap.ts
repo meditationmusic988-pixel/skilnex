@@ -74,7 +74,6 @@ export function sortCoursesByRoadmap(courses: Course[], roadmapSkills: string[])
   return [...matched, ...rest];
 }
 
-// ── NEW: AI recommended names ko actual app courses se match karo ──
 export function matchRoadmapCourses(
   courses: Course[],
   recommendedNames: string[]
@@ -86,11 +85,8 @@ export function matchRoadmapCourses(
       const nameLower = name.toLowerCase().trim();
       return courses.find((c) => {
         const titleLower = c.title.toLowerCase();
-        // Exact match
         if (titleLower === nameLower) return true;
-        // Title contains AI name or AI name contains title
         if (titleLower.includes(nameLower) || nameLower.includes(titleLower)) return true;
-        // Word-level match (min 4 chars to avoid false positives)
         return nameLower
           .split(" ")
           .filter((w) => w.length > 3)
@@ -98,7 +94,6 @@ export function matchRoadmapCourses(
       });
     })
     .filter((c): c is Course => !!c)
-    // Remove duplicates
     .filter((c, i, arr) => arr.findIndex((x) => x.id === c.id) === i);
 }
 
@@ -112,7 +107,167 @@ export function getSkillLabel(roadmapSkills: string[]): string {
     : "Your Skill";
 }
 
-export function buildFirstClientSteps(skillLabel: string) {
+// ── Goal type detector ──
+// goal field mein user ne kya bhara hai usse type detect karo
+export function detectGoalType(goal: string): "freelancer" | "business" | "job" | "general" {
+  if (!goal) return "general";
+  const g = goal.toLowerCase();
+
+  // Business / online grow keywords
+  if (
+    g.includes("business") ||
+    g.includes("online grow") ||
+    g.includes("online business") ||
+    g.includes("apna business") ||
+    g.includes("khud ka business") ||
+    g.includes("shop") ||
+    g.includes("store") ||
+    g.includes("sell") ||
+    g.includes("product") ||
+    g.includes("e-commerce") ||
+    g.includes("ecommerce") ||
+    g.includes("brand") ||
+    g.includes("social media grow") ||
+    g.includes("grow karna")
+  ) {
+    return "business";
+  }
+
+  // Job seeker keywords
+  if (
+    g.includes("job") ||
+    g.includes("naukri") ||
+    g.includes("employ") ||
+    g.includes("company") ||
+    g.includes("office") ||
+    g.includes("salary") ||
+    g.includes("career") ||
+    g.includes("hire")
+  ) {
+    return "job";
+  }
+
+  // Freelancer keywords
+  if (
+    g.includes("freelanc") ||
+    g.includes("fiverr") ||
+    g.includes("upwork") ||
+    g.includes("client") ||
+    g.includes("gig") ||
+    g.includes("remote") ||
+    g.includes("online earn") ||
+    g.includes("paise") ||
+    g.includes("income") ||
+    g.includes("gharsay") ||
+    g.includes("ghar say") ||
+    g.includes("ghar se")
+  ) {
+    return "freelancer";
+  }
+
+  return "general"; // default = freelancer steps
+}
+
+export function buildFirstClientSteps(skillLabel: string, goal?: string) {
+  const goalType = detectGoalType(goal || "");
+
+  // ── BUSINESS OWNER ──
+  if (goalType === "business") {
+    return [
+      {
+        step: "01",
+        title: `${skillLabel} se apni Online Presence Banao`,
+        body: `Facebook Page aur Instagram Business account banao. Profile complete karo — logo, bio, aur ${skillLabel} service clearly mention karo. Yahi tumhara digital shop front hai.`,
+        color: "from-blue-600 to-blue-700",
+        icon: "🏪",
+      },
+      {
+        step: "02",
+        title: "Pehle 5 Customers Free Ya Discounted Deno",
+        body: `Apne circles (family, friends, mohalla) mein announce karo ke tum launch ho rahe ho. Pehle 5 customers ko discount ya free service do — taaki reviews aur word-of-mouth start ho.`,
+        color: "from-emerald-600 to-emerald-700",
+        icon: "🎁",
+      },
+      {
+        step: "03",
+        title: "WhatsApp Business + Broadcast List",
+        body: `WhatsApp Business setup karo. Catalog mein apni services/products add karo. Broadcast list banao — roz ek helpful message ya offer bhejo existing contacts ko.`,
+        color: "from-green-600 to-green-700",
+        icon: "📱",
+      },
+      {
+        step: "04",
+        title: `Facebook Ads — Rs. 200/day se Shuru Karo`,
+        body: `Apni city mein targeted Facebook ad chalao — budget sirf Rs. 200/day. ${skillLabel} ki service ya offer ka ek clear ad banao. Pehle 3 din test karo, jo ad chalti hai usy scale karo.`,
+        color: "from-indigo-600 to-indigo-700",
+        icon: "📢",
+      },
+      {
+        step: "05",
+        title: "Reviews Collect Karo",
+        body: `Har khush customer se Google Review ya Facebook Review maango. Ek simple message: "Aapka experience kaisa raha? Review dein ge toh bohot meharbani hogi." Social proof = more customers.`,
+        color: "from-yellow-600 to-yellow-700",
+        icon: "⭐",
+      },
+      {
+        step: "06",
+        title: "Referral System Shuru Karo",
+        body: `Customers ko batao: "Ek dost refer karo, aapko 10% discount milega." Yeh system automatically new customers laata rehta hai bina advertising ke.`,
+        color: "from-pink-600 to-pink-700",
+        icon: "🤝",
+      },
+    ];
+  }
+
+  // ── JOB SEEKER ──
+  if (goalType === "job") {
+    return [
+      {
+        step: "01",
+        title: `${skillLabel} Portfolio / GitHub Banao`,
+        body: `2-3 real ya practice projects banao aur GitHub pe upload karo ya PDF portfolio tayyar karo. Employers ko proof chahiye hota hai — CV nahi, kaam dekhtay hain.`,
+        color: "from-blue-600 to-blue-700",
+        icon: "💼",
+      },
+      {
+        step: "02",
+        title: "LinkedIn Profile Update Karo",
+        body: `Professional photo, ${skillLabel} headline, aur skills section fill karo. Rozana 3-5 relevant connections add karo. Hiring managers LinkedIn pe actively search kartay hain.`,
+        color: "from-indigo-600 to-indigo-700",
+        icon: "🔗",
+      },
+      {
+        step: "03",
+        title: "Pakistan Job Boards Apply Karo",
+        body: `Rozana Rozee.pk, Mustakbil, aur LinkedIn Jobs pe apply karo. ${skillLabel} keyword se filter karo. Cover letter personalize karo — generic letter mat bhejo.`,
+        color: "from-purple-600 to-purple-700",
+        icon: "📋",
+      },
+      {
+        step: "04",
+        title: "Remote Jobs Bhi Explore Karo",
+        body: `Remote.co, We Work Remotely, aur AngelList pe ${skillLabel} ki remote positions dhundo. Pakistan se internationally kaam karna ab possible hai — dollar income ghar baithe.`,
+        color: "from-cyan-600 to-cyan-700",
+        icon: "🌍",
+      },
+      {
+        step: "05",
+        title: "Mock Interviews Practice Karo",
+        body: `Glassdoor pe company-specific interview questions dhundo. AI tools ya kisi dost ke saath mock interview karo. ${skillLabel} ke technical questions prepare karo.`,
+        color: "from-orange-600 to-orange-700",
+        icon: "🎯",
+      },
+      {
+        step: "06",
+        title: "Referral Maango — Network Use Karo",
+        body: `LinkedIn pe un logon se connect karo jo aapki target company mein kaam kar rahay hain. Politely poochho ke koi opening hai ya referral de saktay hain. 70% jobs referral se milti hain.`,
+        color: "from-emerald-600 to-emerald-700",
+        icon: "🤝",
+      },
+    ];
+  }
+
+  // ── FREELANCER (default) ──
   return [
     {
       step: "01",
