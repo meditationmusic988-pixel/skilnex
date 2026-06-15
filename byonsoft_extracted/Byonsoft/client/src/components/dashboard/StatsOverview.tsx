@@ -1,322 +1,219 @@
-import type { Course, SkillScore } from "@shared/schema";
+import React, { useState, useEffect } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Trophy, Award, Star, PlayCircle, TrendingUp, Brain, Zap } from "lucide-react";
+import { useLocation } from "wouter";
 
-export interface ParsedRoadmap {
+// Same type as SkillTest.tsx RoadmapResult
+interface RoadmapResult {
+  skill_level: string;
+  skill_score: number;
+  confidence_scores: { technical: number; mindset: number; market_awareness: number };
+  strengths: string[];
+  gaps: string[];
   recommended_courses: string[];
   career_paths: string[];
+  expected_income: string;
+  timeline: string;
   learning_order: string[];
-  expected_income?: string;
-  timeline?: string;
-  skill_level?: string;
-  skill_score?: number;
-  motivation?: string;
-  confidence_scores?: {
-    technical: number;
-    mindset: number;
-    market_awareness: number;
-  };
+  motivation: string;
 }
 
-export function toArray(val: unknown): string[] {
-  if (Array.isArray(val)) return val as string[];
-  if (val && typeof val === "object") return Object.values(val as object) as string[];
-  if (typeof val === "string" && val.trim()) {
-    const lines = val
-      .split(/\n|→/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-    return lines.length > 1 ? lines : [val.trim()];
-  }
-  return [];
+interface StatsOverviewProps {
+  isPhase2: boolean;
+  completedCount: number;
+  totalCourses: number;
+  hasAssessment: boolean;
+  inProgressCount: number;
+  onAssessmentClick: () => void;
+  result: RoadmapResult | null; // parsed roadmap_result
 }
 
-export function parseRoadmap(skillScore: SkillScore | null | undefined): ParsedRoadmap | null {
-  if (!skillScore?.roadmap_result) return null;
-  try {
-    const raw = JSON.parse(skillScore.roadmap_result);
-    return {
-      ...raw,
-      recommended_courses: toArray(raw.recommended_courses),
-      career_paths: toArray(raw.career_paths),
-      learning_order: toArray(raw.learning_order),
-    };
-  } catch {
-    return null;
-  }
-}
-
-export function extractRoadmapSkills(skillScore: SkillScore | null | undefined): string[] {
-  if (!skillScore?.roadmap_result) return [];
-  try {
-    const parsed = JSON.parse(skillScore.roadmap_result);
-    const raw: string[] = [];
-    if (Array.isArray(parsed.recommended_courses)) raw.push(...parsed.recommended_courses);
-    if (Array.isArray(parsed.career_paths)) raw.push(...parsed.career_paths);
-    return raw
-      .map((s) => s.trim().toLowerCase())
-      .filter((v) => v.length > 0)
-      .filter((v, i, a) => a.indexOf(v) === i);
-  } catch {
-    return [];
-  }
-}
-
-export function isTagMatch(course: Course, roadmapSkills: string[]): boolean {
-  if (!roadmapSkills.length) return false;
-  const courseTags = (course.tags || "")
-    .split(",")
-    .map((t) => t.trim().toLowerCase())
-    .filter((t) => t.length > 0);
-  if (!courseTags.length) return false;
-  return roadmapSkills.some((skill) =>
-    courseTags.some((tag) => tag.includes(skill) || skill.includes(tag))
+// Animated score ring — same as SkillTest
+function ScoreRing({ score, color }: { score: number; color: string }) {
+  const r = 36;
+  const circ = 2 * Math.PI * r;
+  const [offset, setOffset] = useState(circ);
+  useEffect(() => {
+    const t = setTimeout(() => setOffset(((100 - score) / 100) * circ), 200);
+    return () => clearTimeout(t);
+  }, [score, circ]);
+  return (
+    <div className="relative w-24 h-24 shrink-0">
+      <svg className="-rotate-90 w-full h-full" viewBox="0 0 90 90">
+        <circle cx="45" cy="45" r={r} fill="none" stroke="#1e293b" strokeWidth="7" />
+        <circle
+          cx="45" cy="45" r={r} fill="none" stroke={color} strokeWidth="7"
+          strokeLinecap="round"
+          strokeDasharray={circ}
+          strokeDashoffset={offset}
+          style={{ transition: "stroke-dashoffset 1.5s cubic-bezier(0.16,1,0.3,1)" }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-2xl font-black text-white leading-none">{score}</span>
+        <span className="text-[10px] text-slate-500">/100</span>
+      </div>
+    </div>
   );
 }
 
-export function sortCoursesByRoadmap(courses: Course[], roadmapSkills: string[]): Course[] {
-  if (!roadmapSkills.length) return courses;
-  const matched = courses.filter((c) => isTagMatch(c, roadmapSkills));
-  const rest = courses.filter((c) => !isTagMatch(c, roadmapSkills));
-  return [...matched, ...rest];
+function MiniBar({ value, color, label }: { value: number; color: string; label: string }) {
+  const [w, setW] = useState(0);
+  useEffect(() => {
+    const t = setTimeout(() => setW(value), 300);
+    return () => clearTimeout(t);
+  }, [value]);
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-1">
+        <span className="text-xs text-slate-400">{label}</span>
+        <span className="text-xs font-semibold text-white">{value}%</span>
+      </div>
+      <div className="h-1.5 bg-slate-700/60 rounded-full overflow-hidden">
+        <div
+          className="h-full rounded-full"
+          style={{ width: `${w}%`, background: color, transition: "width 1.4s cubic-bezier(0.16,1,0.3,1)" }}
+        />
+      </div>
+    </div>
+  );
 }
 
-export function matchRoadmapCourses(
-  courses: Course[],
-  recommendedNames: string[]
-): Course[] {
-  if (!recommendedNames.length || !courses.length) return [];
-
-  return recommendedNames
-    .map((name) => {
-      const nameLower = name.toLowerCase().trim();
-      return courses.find((c) => {
-        const titleLower = c.title.toLowerCase();
-        if (titleLower === nameLower) return true;
-        if (titleLower.includes(nameLower) || nameLower.includes(titleLower)) return true;
-        return nameLower
-          .split(" ")
-          .filter((w) => w.length > 3)
-          .some((word) => titleLower.includes(word));
-      });
-    })
-    .filter((c): c is Course => !!c)
-    .filter((c, i, arr) => arr.findIndex((x) => x.id === c.id) === i);
+interface StatCardProps {
+  icon: React.ReactNode;
+  value: React.ReactNode;
+  label: string;
+  accentClass: string;
+  iconBgClass: string;
+  onClick?: () => void;
 }
 
-export function getSkillLabel(roadmapSkills: string[]): string {
-  const primary = roadmapSkills[0] || "";
-  return primary
-    ? primary
-        .split(" ")
-        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-        .join(" ")
-    : "Your Skill";
-}
+const StatCard = React.memo(function StatCard({ icon, value, label, accentClass, iconBgClass, onClick }: StatCardProps) {
+  return (
+    <Card
+      className={`relative overflow-hidden bg-slate-800/60 border-slate-700/60 transition-colors ${onClick ? "cursor-pointer hover:border-purple-500/40" : ""}`}
+      onClick={onClick}
+    >
+      <div className={`absolute inset-x-0 top-0 h-0.5 ${accentClass}`} />
+      <CardContent className="p-4">
+        <div className="flex items-center gap-3">
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${iconBgClass}`}>
+            {icon}
+          </div>
+          <div className="min-w-0">
+            <p className="text-xl font-bold text-white leading-none">{value}</p>
+            <p className="text-slate-400 text-xs mt-0.5">{label}</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
 
-// ── Goal type detector ──
-// goal field mein user ne kya bhara hai usse type detect karo
-export function detectGoalType(goal: string): "freelancer" | "business" | "job" | "general" {
-  if (!goal) return "general";
-  const g = goal.toLowerCase();
+export const StatsOverview = React.memo(function StatsOverview({
+  isPhase2,
+  completedCount,
+  totalCourses,
+  hasAssessment,
+  inProgressCount,
+  onAssessmentClick,
+  result,
+}: StatsOverviewProps) {
+  const [, setLocation] = useLocation();
 
-  // Business / online grow keywords
-  if (
-    g.includes("business") ||
-    g.includes("online grow") ||
-    g.includes("online business") ||
-    g.includes("apna business") ||
-    g.includes("khud ka business") ||
-    g.includes("shop") ||
-    g.includes("store") ||
-    g.includes("sell") ||
-    g.includes("product") ||
-    g.includes("e-commerce") ||
-    g.includes("ecommerce") ||
-    g.includes("brand") ||
-    g.includes("social media grow") ||
-    g.includes("grow karna")
-  ) {
-    return "business";
-  }
+  const score = result?.skill_score ?? 0;
+  const scoreColor = score < 40 ? "#ef4444" : score < 65 ? "#f59e0b" : "#22c55e";
+  const levelBadgeClass =
+    result?.skill_level === "Beginner" ? "bg-amber-500/15 text-amber-300 border-amber-500/25" :
+    result?.skill_level === "Advanced" ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/25" :
+    "bg-blue-500/15 text-blue-300 border-blue-500/25";
 
-  // Job seeker keywords
-  if (
-    g.includes("job") ||
-    g.includes("naukri") ||
-    g.includes("employ") ||
-    g.includes("company") ||
-    g.includes("office") ||
-    g.includes("salary") ||
-    g.includes("career") ||
-    g.includes("hire")
-  ) {
-    return "job";
-  }
+  return (
+    <div className="space-y-3">
 
-  // Freelancer keywords
-  if (
-    g.includes("freelanc") ||
-    g.includes("fiverr") ||
-    g.includes("upwork") ||
-    g.includes("client") ||
-    g.includes("gig") ||
-    g.includes("remote") ||
-    g.includes("online earn") ||
-    g.includes("paise") ||
-    g.includes("income") ||
-    g.includes("gharsay") ||
-    g.includes("ghar say") ||
-    g.includes("ghar se")
-  ) {
-    return "freelancer";
-  }
+      {/* Score card — only when result exists */}
+      {hasAssessment && result && score > 0 && (
+        <div className="relative overflow-hidden rounded-2xl border border-blue-500/20 bg-[#0D1626]">
+          <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-blue-500 to-transparent opacity-60" />
 
-  return "general"; // default = freelancer steps
-}
+          <div className="flex items-center gap-2 px-5 pt-4 pb-3 border-b border-white/5">
+            <div className="w-7 h-7 rounded-lg bg-blue-600/20 border border-blue-500/25 flex items-center justify-center">
+              <Brain className="w-3.5 h-3.5 text-blue-400" />
+            </div>
+            <p className="text-white font-bold text-sm">AI Skill Score</p>
+            <button
+              onClick={onAssessmentClick}
+              className="ml-auto flex items-center gap-1 text-blue-400 hover:text-blue-300 text-xs font-semibold transition-colors"
+            >
+              <Zap className="w-3 h-3" /> Update
+            </button>
+          </div>
 
-export function buildFirstClientSteps(skillLabel: string, goal?: string) {
-  const goalType = detectGoalType(goal || "");
+          <div className="p-5 space-y-4">
+            {/* Ring + level + motivation */}
+            <div className="flex items-center gap-5">
+              <ScoreRing score={score} color={scoreColor} />
+              <div className="flex-1 min-w-0">
+                {result.skill_level && (
+                  <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full border mb-2 ${levelBadgeClass}`}>
+                    <Award className="w-3 h-3" /> {result.skill_level}
+                  </span>
+                )}
+                {result.motivation && (
+                  <p className="text-slate-400 text-xs italic leading-relaxed line-clamp-2">
+                    "{result.motivation}"
+                  </p>
+                )}
+              </div>
+            </div>
 
-  // ── BUSINESS OWNER ──
-  if (goalType === "business") {
-    return [
-      {
-        step: "01",
-        title: `${skillLabel} se apni Online Presence Banao`,
-        body: `Facebook Page aur Instagram Business account banao. Profile complete karo — logo, bio, aur ${skillLabel} service clearly mention karo. Yahi tumhara digital shop front hai.`,
-        color: "from-blue-600 to-blue-700",
-        icon: "🏪",
-      },
-      {
-        step: "02",
-        title: "Pehle 5 Customers Free Ya Discounted Deno",
-        body: `Apne circles (family, friends, mohalla) mein announce karo ke tum launch ho rahe ho. Pehle 5 customers ko discount ya free service do — taaki reviews aur word-of-mouth start ho.`,
-        color: "from-emerald-600 to-emerald-700",
-        icon: "🎁",
-      },
-      {
-        step: "03",
-        title: "WhatsApp Business + Broadcast List",
-        body: `WhatsApp Business setup karo. Catalog mein apni services/products add karo. Broadcast list banao — roz ek helpful message ya offer bhejo existing contacts ko.`,
-        color: "from-green-600 to-green-700",
-        icon: "📱",
-      },
-      {
-        step: "04",
-        title: `Facebook Ads — Rs. 200/day se Shuru Karo`,
-        body: `Apni city mein targeted Facebook ad chalao — budget sirf Rs. 200/day. ${skillLabel} ki service ya offer ka ek clear ad banao. Pehle 3 din test karo, jo ad chalti hai usy scale karo.`,
-        color: "from-indigo-600 to-indigo-700",
-        icon: "📢",
-      },
-      {
-        step: "05",
-        title: "Reviews Collect Karo",
-        body: `Har khush customer se Google Review ya Facebook Review maango. Ek simple message: "Aapka experience kaisa raha? Review dein ge toh bohot meharbani hogi." Social proof = more customers.`,
-        color: "from-yellow-600 to-yellow-700",
-        icon: "⭐",
-      },
-      {
-        step: "06",
-        title: "Referral System Shuru Karo",
-        body: `Customers ko batao: "Ek dost refer karo, aapko 10% discount milega." Yeh system automatically new customers laata rehta hai bina advertising ke.`,
-        color: "from-pink-600 to-pink-700",
-        icon: "🤝",
-      },
-    ];
-  }
+            {/* Breakdown bars */}
+            {result.confidence_scores && (
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                  <TrendingUp className="w-3 h-3" /> Skill Breakdown
+                </p>
+                <MiniBar label="Technical Skills" value={result.confidence_scores.technical ?? 0} color="#3b82f6" />
+                <MiniBar label="Career Mindset" value={result.confidence_scores.mindset ?? 0} color="#22c55e" />
+                <MiniBar label="Market Awareness" value={result.confidence_scores.market_awareness ?? 0} color="#f59e0b" />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
-  // ── JOB SEEKER ──
-  if (goalType === "job") {
-    return [
-      {
-        step: "01",
-        title: `${skillLabel} Portfolio / GitHub Banao`,
-        body: `2-3 real ya practice projects banao aur GitHub pe upload karo ya PDF portfolio tayyar karo. Employers ko proof chahiye hota hai — CV nahi, kaam dekhtay hain.`,
-        color: "from-blue-600 to-blue-700",
-        icon: "💼",
-      },
-      {
-        step: "02",
-        title: "LinkedIn Profile Update Karo",
-        body: `Professional photo, ${skillLabel} headline, aur skills section fill karo. Rozana 3-5 relevant connections add karo. Hiring managers LinkedIn pe actively search kartay hain.`,
-        color: "from-indigo-600 to-indigo-700",
-        icon: "🔗",
-      },
-      {
-        step: "03",
-        title: "Pakistan Job Boards Apply Karo",
-        body: `Rozana Rozee.pk, Mustakbil, aur LinkedIn Jobs pe apply karo. ${skillLabel} keyword se filter karo. Cover letter personalize karo — generic letter mat bhejo.`,
-        color: "from-purple-600 to-purple-700",
-        icon: "📋",
-      },
-      {
-        step: "04",
-        title: "Remote Jobs Bhi Explore Karo",
-        body: `Remote.co, We Work Remotely, aur AngelList pe ${skillLabel} ki remote positions dhundo. Pakistan se internationally kaam karna ab possible hai — dollar income ghar baithe.`,
-        color: "from-cyan-600 to-cyan-700",
-        icon: "🌍",
-      },
-      {
-        step: "05",
-        title: "Mock Interviews Practice Karo",
-        body: `Glassdoor pe company-specific interview questions dhundo. AI tools ya kisi dost ke saath mock interview karo. ${skillLabel} ke technical questions prepare karo.`,
-        color: "from-orange-600 to-orange-700",
-        icon: "🎯",
-      },
-      {
-        step: "06",
-        title: "Referral Maango — Network Use Karo",
-        body: `LinkedIn pe un logon se connect karo jo aapki target company mein kaam kar rahay hain. Politely poochho ke koi opening hai ya referral de saktay hain. 70% jobs referral se milti hain.`,
-        color: "from-emerald-600 to-emerald-700",
-        icon: "🤝",
-      },
-    ];
-  }
-
-  // ── FREELANCER (default) ──
-  return [
-    {
-      step: "01",
-      title: `${skillLabel} Portfolio Banao`,
-      body: `${skillLabel} ke 2-3 sample projects banao — real clients na hon to fictional ya self-initiated projects bhi chalte hain. Ek clean PDF ya website pe showcase karo.`,
-      color: "from-blue-600 to-blue-700",
-      icon: "🗂️",
-    },
-    {
-      step: "02",
-      title: "Fiverr / Upwork Gig Launch Karo",
-      body: `${skillLabel} service ka ek strong gig banao. Shuru mein competitive rate rakho, aur pehle 1-2 free ya discounted orders se 5-star reviews collect karo.`,
-      color: "from-purple-600 to-purple-700",
-      icon: "🚀",
-    },
-    {
-      step: "03",
-      title: "Local Businesses Ko Approach Karo",
-      body: `Apne sheher ke businesses ko WhatsApp ya direct message karo. Batao ke tum unki ${skillLabel} problems solve kar sakte ho. Ek free audit ya sample offer karo.`,
-      color: "from-emerald-600 to-emerald-700",
-      icon: "🏪",
-    },
-    {
-      step: "04",
-      title: "Facebook Groups & LinkedIn Use Karo",
-      body: `${skillLabel} se related Facebook groups join karo. Roz ek helpful post ya answer daalo. Jab log tumhari expertise dekhein ge, woh khud DM karein ge.`,
-      color: "from-orange-600 to-orange-700",
-      icon: "📱",
-    },
-    {
-      step: "05",
-      title: "Cold Outreach Script",
-      body: `"Hi [Name], maine aapki [profile/website] dekhi — aapko ${skillLabel} mein [specific problem] hai. Main help kar sakta/sakti hoon. Kya 10 min call ho sakti hai?" Short aur specific rakho.`,
-      color: "from-pink-600 to-pink-700",
-      icon: "✉️",
-    },
-    {
-      step: "06",
-      title: "Referrals Maango",
-      body: `Jab pehla client mil jaye aur kaam achha ho, poochho: 'Kya aap mujhe kisi aur ke saath refer kar sakte hain?' Word-of-mouth fastest aur free growth hack hai.`,
-      color: "from-cyan-600 to-cyan-700",
-      icon: "🤝",
-    },
-  ];
-}
-
-export const STEP_COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#a855f7", "#ef4444", "#06b6d4"];
+      {/* 4 stat cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <StatCard
+          accentClass={isPhase2 ? "bg-gradient-to-r from-purple-500 to-blue-500" : "bg-gradient-to-r from-yellow-500 to-orange-500"}
+          iconBgClass={isPhase2 ? "bg-purple-600/20" : "bg-yellow-600/20"}
+          icon={<Trophy className={`w-4 h-4 ${isPhase2 ? "text-purple-300" : "text-yellow-400"}`} />}
+          value={<span className={`text-base font-bold ${isPhase2 ? "text-purple-200" : "text-yellow-300"}`}>{isPhase2 ? "1 Lakh" : "35,000"}</span>}
+          label={isPhase2 ? "Mega Giveaway" : "Phase 1 Prize"}
+        />
+        <StatCard
+          accentClass="bg-gradient-to-r from-emerald-500 to-green-400"
+          iconBgClass="bg-emerald-600/20"
+          icon={<Award className="w-4 h-4 text-emerald-400" />}
+          value={<>{completedCount}<span className="text-slate-500 text-sm font-normal">/{totalCourses}</span></>}
+          label="Completed"
+        />
+        <StatCard
+          accentClass={hasAssessment ? "bg-gradient-to-r from-emerald-500 to-teal-400" : "bg-gradient-to-r from-yellow-500 to-amber-400"}
+          iconBgClass={hasAssessment ? "bg-emerald-600/20" : "bg-yellow-600/20"}
+          icon={<Star className={`w-4 h-4 ${hasAssessment ? "text-emerald-400" : "text-yellow-400"}`} />}
+          value={hasAssessment ? "✓" : "?"}
+          label={hasAssessment ? "AI Done" : "Take Test"}
+          onClick={!hasAssessment ? onAssessmentClick : undefined}
+        />
+        <StatCard
+          accentClass="bg-gradient-to-r from-indigo-500 to-purple-500"
+          iconBgClass="bg-indigo-600/20"
+          icon={<PlayCircle className="w-4 h-4 text-indigo-400" />}
+          value={inProgressCount}
+          label="In Progress"
+        />
+      </div>
+    </div>
+  );
+});
