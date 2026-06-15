@@ -9,6 +9,11 @@ export interface ParsedRoadmap {
   skill_level?: string;
   skill_score?: number;
   motivation?: string;
+  confidence_scores?: {
+    technical: number;
+    mindset: number;
+    market_awareness: number;
+  };
 }
 
 export function toArray(val: unknown): string[] {
