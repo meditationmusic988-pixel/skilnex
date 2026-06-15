@@ -10,7 +10,7 @@ import {
   TrendingUp, Target, Award, Star, ChevronRight,
   Palette, PenTool, Megaphone, Video, Code2, Globe, Camera, MessageSquare
 } from "lucide-react";
-import type { SkillScore } from "@shared/schema";
+import type { SkillScore, Course } from "@shared/schema";
 
 interface RoadmapResult {
   skill_level: string;
@@ -180,6 +180,11 @@ export default function SkillTest() {
   const [meterVals, setMeterVals] = useState([0, 0, 0]);
   const [result, setResult] = useState<RoadmapResult | null>(null);
 
+  // ── Fetch actual app courses ──
+  const { data: courses = [] } = useQuery<Course[]>({
+    queryKey: ["/api/courses"],
+  });
+
   const { data: skillScore, isLoading: loadingSkills } = useQuery<SkillScore | null>({
     queryKey: ["/api/skills"],
   });
@@ -218,12 +223,19 @@ export default function SkillTest() {
       setLoadingMsgIdx(mi);
     }, 1400);
     setTimeout(() => setMeterVals([85, 72, 90]), 300);
-    // Call AI immediately — don't wait 30 seconds!
     callAI(msgInt);
   };
 
   const callAI = async (msgInt?: ReturnType<typeof setInterval>) => {
+    // ── Build course list from actual app courses ──
+    const courseList = courses.length > 0
+      ? courses.map((c, i) => `${i + 1}. ${c.title} (${c.category})`).join("\n")
+      : "No courses available";
+
     const prompt = `You are a career advisor for Pakistan. A user rated their skills on a scale of 0-4.
+
+IMPORTANT: You MUST recommend courses ONLY from this exact list. Use the EXACT title as written:
+${courseList}
 
 User profile:
 - Goal: ${goal}
@@ -232,19 +244,25 @@ User profile:
 - Skill ratings (0=None, 1=Basic, 2=Okay, 3=Good, 4=Expert): ${ratedSkillsSummary}
 - Overall skill score: ${avgSkillScore}/100
 
-Based on their HIGHEST rated skills and their goal, generate a career roadmap.
+Instructions:
+1. Pick 3-4 courses from the list above that best match the user's goal and highest-rated skills.
+2. Use the EXACT course title from the list — do not modify or invent names.
+3. If no course matches perfectly, pick the closest ones.
+4. career_paths should match the user's goal (e.g. if goal is shop owner, suggest shop/business paths).
+5. learning_order should describe steps using skill names, NOT course names.
+
 Respond ONLY with valid JSON (no markdown, no extra text):
 {
   "skill_level": "Beginner|Intermediate|Advanced",
   "skill_score": ${avgSkillScore},
   "confidence_scores": {"technical": 40, "mindset": 65, "market_awareness": 50},
-  "strengths": ["strength based on high-rated skills","another strength"],
-  "gaps": ["gap based on low-rated skills","another gap"],
-  "recommended_courses": ["Course 1 — Platform","Course 2 — Platform","Course 3 — Platform","Course 4 — Platform"],
-  "career_paths": ["Path 1","Path 2","Path 3"],
+  "strengths": ["strength based on high-rated skills", "another strength"],
+  "gaps": ["gap based on low-rated skills", "another gap"],
+  "recommended_courses": ["Exact Course Title From List Above", "Exact Course Title From List Above", "Exact Course Title From List Above"],
+  "career_paths": ["Path matching user goal", "Path 2", "Path 3"],
   "expected_income": "PKR 40,000 – 120,000/month",
   "timeline": "3–6 months to first earning",
-  "learning_order": ["Step 1: description","Step 2: description","Step 3: description","Step 4: description"],
+  "learning_order": ["Step 1: learn this skill", "Step 2: practice this", "Step 3: apply here", "Step 4: grow by doing this"],
   "motivation": "One powerful motivating sentence in Urdu or English"
 }`;
 
@@ -264,18 +282,34 @@ Respond ONLY with valid JSON (no markdown, no extra text):
       goPhase(4);
     } catch {
       if (msgInt) clearInterval(msgInt);
+      // ── Fallback: use first 4 actual courses if available ──
+      const fallbackCourses = courses.length > 0
+        ? courses.slice(0, 4).map(c => c.title)
+        : ["Digital Marketing Course", "Freelancing Basics", "E-Commerce Setup", "Content Creation"];
+
       const topSkills = [...skills].sort((a, b) => b.value - a.value).slice(0, 2).map(s => s.label);
       setResult({
         skill_level: avgSkillScore < 35 ? "Beginner" : avgSkillScore < 65 ? "Intermediate" : "Advanced",
         skill_score: avgSkillScore || 30,
-        confidence_scores: { technical: avgSkillScore, mindset: Math.min(avgSkillScore + 15, 100), market_awareness: Math.max(avgSkillScore - 10, 10) },
-        strengths: topSkills.length ? [`${topSkills[0]} mein acha base hai`, "Seekhne ki lagan zahir hai"] : ["Seekhne ki lagan hai", "Goal clear hai"],
+        confidence_scores: {
+          technical: avgSkillScore,
+          mindset: Math.min(avgSkillScore + 15, 100),
+          market_awareness: Math.max(avgSkillScore - 10, 10),
+        },
+        strengths: topSkills.length
+          ? [`${topSkills[0]} mein acha base hai`, "Seekhne ki lagan zahir hai"]
+          : ["Seekhne ki lagan hai", "Goal clear hai"],
         gaps: ["Practical client-facing experience", "Portfolio banana abhi baki hai"],
-        recommended_courses: ["Canva Graphics — YouTube (Free)", "Fiverr Freelancing Basics — Fiverr Learn", "Digital Marketing — Google Digital Garage", "Content Writing — Coursera"],
-        career_paths: ["Freelance Designer", "Social Media Manager", "Content Creator"],
+        recommended_courses: fallbackCourses,
+        career_paths: ["Freelancer", "Online Business Owner", "Content Creator"],
         expected_income: "PKR 30,000 – 80,000/month",
         timeline: "2–4 months to first earning",
-        learning_order: ["Step 1: Apni top skill polish karein", "Step 2: Portfolio ke 3 sample projects banayein", "Step 3: Fiverr/LinkedIn profile setup karein", "Step 4: Pehla gig/proposal submit karein"],
+        learning_order: [
+          "Step 1: Apni top skill polish karein",
+          "Step 2: Portfolio ke 3 sample projects banayein",
+          "Step 3: Online profile setup karein",
+          "Step 4: Pehla client ya order lein",
+        ],
         motivation: "Aap ke paas skills hain — bas inhe duniya ko dikhane ka waqt aa gaya hai!",
       });
       goPhase(4);
@@ -290,7 +324,10 @@ Respond ONLY with valid JSON (no markdown, no extra text):
   };
 
   const scoreColor = (s: number) => s < 40 ? "#ef4444" : s < 65 ? "#f59e0b" : "#22c55e";
-  const levelColor = (l: string) => l === "Beginner" ? "bg-amber-500/20 text-amber-300 border-amber-500/30" : l === "Advanced" ? "bg-green-500/20 text-green-300 border-green-500/30" : "bg-blue-500/20 text-blue-300 border-blue-500/30";
+  const levelColor = (l: string) =>
+    l === "Beginner" ? "bg-amber-500/20 text-amber-300 border-amber-500/30" :
+    l === "Advanced" ? "bg-green-500/20 text-green-300 border-green-500/30" :
+    "bg-blue-500/20 text-blue-300 border-blue-500/30";
 
   if (loadingSkills) {
     return (
@@ -535,6 +572,7 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               </button>
             </div>
 
+            {/* Score ring */}
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 flex items-center gap-5">
               <ScoreRing score={result.skill_score ?? 0} color={scoreColor(result.skill_score ?? 0)} />
               <div className="flex-1 min-w-0">
@@ -545,6 +583,7 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               </div>
             </div>
 
+            {/* Skill breakdown */}
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                 <TrendingUp className="w-3.5 h-3.5" /> Skill Breakdown
@@ -554,6 +593,7 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               <ResultBar label="Market Awareness"  value={result.confidence_scores?.market_awareness ?? 50} color="#f59e0b" />
             </div>
 
+            {/* Rated skills */}
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Aapki Rated Skills</p>
               <div className="grid grid-cols-2 gap-2">
@@ -575,6 +615,7 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               </div>
             </div>
 
+            {/* Strengths + Gaps */}
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-green-500/5 border border-green-500/20 rounded-2xl p-4">
                 <p className="text-xs font-bold text-green-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
@@ -602,6 +643,7 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               </div>
             </div>
 
+            {/* Career paths + income */}
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
                 <Briefcase className="w-3.5 h-3.5" /> Career Paths
@@ -618,6 +660,7 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               </div>
             </div>
 
+            {/* Recommended courses — actual app courses */}
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                 <BookOpen className="w-3.5 h-3.5" /> Recommended Courses
@@ -632,6 +675,7 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               </div>
             </div>
 
+            {/* Learning order */}
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                 <ListOrdered className="w-3.5 h-3.5" /> Learning Order
@@ -652,6 +696,7 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               </div>
             </div>
 
+            {/* CTA */}
             <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl p-5 text-center">
               <p className="text-white font-bold mb-1">Ready to start? 🚀</p>
               <p className="text-blue-200 text-xs mb-4">Apne courses explore karo aur pehla qadam uthao!</p>
