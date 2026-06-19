@@ -22,7 +22,7 @@ import { DashboardFooter } from "@/components/dashboard/DashboardFooter";
 import { isPremium as checkPremium } from "@/utils/premium";
 import { countCompleted, countInProgress } from "@/utils/progress";
 import {
-  parseRoadmap,
+  mapCareerAnalysisToRoadmap,
   extractRoadmapSkills,
   isTagMatch,
   matchRoadmapCourses,
@@ -123,11 +123,26 @@ export default function Dashboard() {
     staleTime: 1000 * 60 * 5,
   });
 
+  // ── SINGLE SOURCE OF TRUTH ──
+  // This is the SAME endpoint CareerResult.tsx uses right after the skill test.
+  // Using it here too means the Dashboard always matches what the user saw
+  // on the results page — no more two different AI answers disagreeing.
+  const { data: careerAnalysis } = useQuery<any>({
+    queryKey: ["/api/career-results/me/latest"],
+    queryFn: async () => {
+      const token = localStorage.getItem("token");
+      const r = await fetch("/api/career-results/me/latest", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) return null;
+      return r.json();
+    },
+  });
 
   // ── Derived state ──
   const price = priceSetting?.subscription_price ?? 750;
   const premium = checkPremium(user);
-  const hasAssessment = !!(skillScore?.goal);
+  const hasAssessment = !!careerAnalysis || !!(skillScore?.goal);
   const completedCount = useMemo(() => countCompleted(progressList), [progressList]);
   const inProgressCount = useMemo(() => countInProgress(progressList), [progressList]);
   const totalCourses = courses.length;
@@ -135,29 +150,13 @@ export default function Dashboard() {
   const premiumCount = giveawayStats?.activeUsers ?? 0;
   const isPhase2 = premiumCount >= 300;
 
-  // ── FIX: Roadmap + parsed result — SYNC WITH ASSESSMENT ──
-  const roadmapResult = useMemo(() => {
-    if (!skillScore?.roadmap_result) return null;
-    try { 
-        return typeof skillScore.roadmap_result === 'string' 
-            ? JSON.parse(skillScore.roadmap_result) 
-            : skillScore.roadmap_result; 
-    } catch { return null; }
-  }, [skillScore]);
+  // ── Roadmap now comes from career_analyses (same as results page) ──
+  const roadmap = useMemo(
+    () => mapCareerAnalysisToRoadmap(careerAnalysis),
+    [careerAnalysis]
+  );
 
-  const roadmap = useMemo(() => {
-    if (!roadmapResult) return parseRoadmap(skillScore);
-    // Map the AI result fields to the Roadmap object
-    return {
-      title: roadmapResult.career_paths?.[0] || "Career Path",
-      career_paths: roadmapResult.career_paths || [],
-      recommended_courses: roadmapResult.recommended_courses || [],
-      expected_income: roadmapResult.expected_income || "",
-      learning_path: roadmapResult.learning_order || roadmapResult.learning_path || ""
-    };
-  }, [roadmapResult, skillScore]);
-
-  const roadmapSkills = useMemo(() => extractRoadmapSkills(skillScore), [skillScore]);
+  const roadmapSkills = useMemo(() => extractRoadmapSkills(roadmap), [roadmap]);
 
   // ── Matched courses ──
   const matchedCourses = useMemo(
@@ -261,10 +260,10 @@ export default function Dashboard() {
           hasAssessment={hasAssessment}
           inProgressCount={inProgressCount}
           onAssessmentClick={() => setLocation("/skill-test?new=1")}
-          result={roadmapResult}
+          result={careerAnalysis}
         />
 
-        {/* AI Roadmap — Matched result is passed here */}
+        {/* AI Roadmap — now uses the SAME result as the post-test results page */}
         <AIRoadmapSection
           roadmap={roadmap}
           matchedCourses={matchedCourses}
