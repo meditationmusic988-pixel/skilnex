@@ -11,7 +11,7 @@ import { PWAInstallButton } from "@/components/PWAInstallButton";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { WelcomeHero } from "@/components/dashboard/WelcomeHero";
 import { StatsOverview } from "@/components/dashboard/StatsOverview";
-import { AIRoadmapSection } from "@/components/dashboard/AIRoadmapSection";
+import { SkillResultCard } from "@/components/dashboard/SkillResultCard";
 import { FirstClientGuide } from "@/components/dashboard/FirstClientGuide";
 import { CoursesGrid } from "@/components/dashboard/CoursesGrid";
 import { PricingSection } from "@/components/dashboard/PricingSection";
@@ -123,7 +123,6 @@ export default function Dashboard() {
     staleTime: 1000 * 60 * 5,
   });
 
-
   // ── Derived state ──
   const price = priceSetting?.subscription_price ?? 750;
   const premium = checkPremium(user);
@@ -135,12 +134,8 @@ export default function Dashboard() {
   const premiumCount = giveawayStats?.activeUsers ?? 0;
   const isPhase2 = premiumCount >= 300;
 
-  // ── Roadmap + parsed result for StatsOverview ──
+  // ── Roadmap ──
   const roadmap = useMemo(() => parseRoadmap(skillScore), [skillScore]);
-  const roadmapResult = useMemo(() => {
-    if (!skillScore?.roadmap_result) return null;
-    try { return JSON.parse(skillScore.roadmap_result); } catch { return null; }
-  }, [skillScore]);
   const roadmapSkills = useMemo(() => extractRoadmapSkills(skillScore), [skillScore]);
 
   // ── Matched courses: AI recommended names → actual app courses ──
@@ -252,16 +247,30 @@ export default function Dashboard() {
           hasAssessment={hasAssessment}
           inProgressCount={inProgressCount}
           onAssessmentClick={() => setLocation("/skill-test?new=1")}
-          result={roadmapResult}
+          result={(() => { try { let p = JSON.parse(skillScore?.roadmap_result ?? ""); if (typeof p === "string") p = JSON.parse(p); return p?.skill_score ? p : null; } catch { return null; } })()}
         />
 
-        {/* AI Roadmap — matched courses pass karo */}
-        <AIRoadmapSection
-          roadmap={roadmap}
-          matchedCourses={matchedCourses}
-          onImprove={() => setLocation("/skill-test?new=1")}
-          onGetRoadmap={() => setLocation("/skill-test?new=1")}
-        />
+        {/* Skill Test Result — exact same as SkillTest Phase 4 */}
+        {hasAssessment ? (
+          <SkillResultCard
+            skillScore={skillScore}
+            onRetake={() => setLocation("/skill-test?new=1")}
+          />
+        ) : (
+          <div className="relative overflow-hidden rounded-2xl border border-dashed border-indigo-500/30 bg-slate-900/40 p-10 text-center space-y-4">
+            <div className="w-14 h-14 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center mx-auto">
+              <span className="text-2xl">🧠</span>
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-white mb-1">No Career Roadmap Yet</h2>
+              <p className="text-slate-400 text-sm">Complete the AI Career Assessment to get your personalized roadmap.</p>
+            </div>
+            <button onClick={() => setLocation("/skill-test?new=1")}
+              className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 py-3 rounded-xl text-sm transition-colors">
+              Start Assessment
+            </button>
+          </div>
+        )}
 
         {/* First Client Guide — goal ke basis pe personalized */}
         <FirstClientGuide
@@ -325,4 +334,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
