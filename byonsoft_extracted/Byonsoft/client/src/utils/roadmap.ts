@@ -1,7 +1,6 @@
 import type { Course, SkillScore } from "@shared/schema";
 
 export interface ParsedRoadmap {
-  title?: string;
   recommended_courses: string[];
   career_paths: string[];
   learning_order: string[];
@@ -9,6 +8,7 @@ export interface ParsedRoadmap {
   timeline?: string;
   skill_level?: string;
   skill_score?: number;
+  motivation?: string;
   confidence_scores?: {
     technical: number;
     mindset: number;
@@ -16,118 +16,86 @@ export interface ParsedRoadmap {
   };
 }
 
-// Clean AI text (Remove "1.", "2.", "-", etc.)
-export function cleanText(text: string): string {
-  return text.replace(/^\d+[\.\)]\s*/, '').replace(/^[-•*]\s*/, '').trim();
-}
-
 export function toArray(val: unknown): string[] {
-  if (Array.isArray(val)) return val.map(v => cleanText(String(v)));
-  if (val && typeof val === "object") return Object.values(val as object).map(v => cleanText(String(v)));
+  if (Array.isArray(val)) return val as string[];
+  if (val && typeof val === "object") return Object.values(val as object) as string[];
   if (typeof val === "string" && val.trim()) {
-    // Split by new line, arrows, or bullets
-    const lines = val
-      .split(/\n|→|•/)
-      .map((s) => cleanText(s))
-      .filter(Boolean);
-    return lines;
+    const lines = val.split(/\n|→/).map((s) => s.trim()).filter(Boolean);
+    return lines.length > 1 ? lines : [val.trim()];
   }
   return [];
 }
 
-export function parseRoadmap(skillScore: SkillScore | null | undefined): ParsedRoadmap | null {
-  if (!skillScore?.roadmap_result) return null;
+// Safely parse roadmap_result — handles double-stringified JSON
+function safeParseRoadmapResult(raw: string): Record<string, unknown> | null {
+  if (!raw || !raw.trim()) return null;
   try {
-    const raw = typeof skillScore.roadmap_result === 'string' 
-      ? JSON.parse(skillScore.roadmap_result) 
-      : skillScore.roadmap_result;
-
-    return {
-      ...raw,
-      recommended_courses: toArray(raw.recommended_courses || raw.recommendedCourses),
-      career_paths: toArray(raw.career_paths || raw.careerPaths || raw.career_path),
-      learning_order: toArray(raw.learning_order || raw.learningOrder || raw.learning_path),
-      expected_income: raw.expected_income || raw.expectedIncome || ""
-    };
+    let parsed = JSON.parse(raw);
+    // Handle double-stringified: "{\"skill_score\":...}"
+    if (typeof parsed === "string") {
+      parsed = JSON.parse(parsed);
+    }
+    if (typeof parsed === "object" && parsed !== null) return parsed;
+    return null;
   } catch {
     return null;
   }
 }
 
-/**
- * ── CAREER ANALYSIS → ROADMAP MAPPER ──
- * Maps the `/api/career-results/me/latest` response (career_analyses table)
- * into the same ParsedRoadmap shape the Dashboard UI expects.
- * This is now the SINGLE SOURCE OF TRUTH used by both the results page
- * and the Dashboard, so the numbers never disagree again.
- */
-export function mapCareerAnalysisToRoadmap(analysis: any): ParsedRoadmap | null {
-  if (!analysis) return null;
-
-  const careerPaths = [analysis.skill_path, analysis.secondary_path].filter(Boolean);
-
-  const recommendedSkills: string[] = Array.isArray(analysis.recommended_skills)
-    ? analysis.recommended_skills
-    : toArray(analysis.recommended_skills);
-
-  const roadmapObj = analysis.roadmap || {};
-  const learningOrderParts = [roadmapObj.month1, roadmapObj.month2, roadmapObj.month3].filter(Boolean);
-  const learningOrder = learningOrderParts.map((step: string, i: number) => `Month ${i + 1}: ${step}`);
-
+export function parseRoadmap(skillScore: SkillScore | null | undefined): ParsedRoadmap | null {
+  if (!skillScore?.roadmap_result) return null;
+  const raw = safeParseRoadmapResult(skillScore.roadmap_result);
+  if (!raw) return null;
   return {
-    title: analysis.skill_path || "Career Path",
-    career_paths: careerPaths,
-    recommended_courses: recommendedSkills,
-    learning_order: learningOrder,
-    expected_income: analysis.income_6m
-      ? `${analysis.income_6m} (6 months) → ${analysis.income_12m || ""} (12 months)`.trim()
-      : analysis.income_12m || "",
+    ...raw,
+    recommended_courses: toArray(raw.recommended_courses),
+    career_paths: toArray(raw.career_paths),
+    learning_order: toArray(raw.learning_order),
+    skill_score: typeof raw.skill_score === "number" ? raw.skill_score : undefined,
+    skill_level: typeof raw.skill_level === "string" ? raw.skill_level : undefined,
+    motivation: typeof raw.motivation === "string" ? raw.motivation : undefined,
+    expected_income: typeof raw.expected_income === "string" ? raw.expected_income : undefined,
+    timeline: typeof raw.timeline === "string" ? raw.timeline : undefined,
+    confidence_scores: raw.confidence_scores && typeof raw.confidence_scores === "object"
+      ? raw.confidence_scores as ParsedRoadmap["confidence_scores"]
+      : undefined,
   };
 }
 
-export function extractRoadmapSkills(roadmap: ParsedRoadmap | null | undefined): string[] {
-  if (!roadmap) return [];
-
-  const raw: string[] = [...(roadmap.recommended_courses || []), ...(roadmap.career_paths || [])];
-  return raw
-    .map((s) => s.toLowerCase())
-    .filter((v) => v.length > 2)
-    .filter((v, i, a) => a.indexOf(v) === i);
+export function extractRoadmapSkills(skillScore: SkillScore | null | undefined): string[] {
+  if (!skillScore?.roadmap_result) return [];
+  const parsed = safeParseRoadmapResult(skillScore.roadmap_result);
+  if (!parsed) return [];
+  const raw: string[] = [];
+  if (Array.isArray(parsed.recommended_courses)) raw.push(...parsed.recommended_courses);
+  if (Array.isArray(parsed.career_paths)) raw.push(...parsed.career_paths);
+  return raw.map((s) => s.trim().toLowerCase()).filter((v) => v.length > 0).filter((v, i, a) => a.indexOf(v) === i);
 }
 
 export function isTagMatch(course: Course, roadmapSkills: string[]): boolean {
   if (!roadmapSkills.length) return false;
-  const courseTags = (course.tags || "")
-    .split(",")
-    .map((t) => t.trim().toLowerCase())
-    .filter((t) => t.length > 0);
-  
-  const titleLower = course.title.toLowerCase();
-  
-  return roadmapSkills.some((skill) => {
-    const s = skill.toLowerCase();
-    // Match by tags OR if course title is mentioned in the roadmap
-    return courseTags.some((tag) => tag.includes(s) || s.includes(tag)) || 
-           titleLower.includes(s) || s.includes(titleLower);
-  });
+  const courseTags = (course.tags || "").split(",").map((t) => t.trim().toLowerCase()).filter((t) => t.length > 0);
+  if (!courseTags.length) return false;
+  return roadmapSkills.some((skill) => courseTags.some((tag) => tag.includes(skill) || skill.includes(tag)));
 }
 
-export function matchRoadmapCourses(
-  courses: Course[],
-  recommendedNames: string[]
-): Course[] {
-  if (!recommendedNames.length || !courses.length) return [];
+export function sortCoursesByRoadmap(courses: Course[], roadmapSkills: string[]): Course[] {
+  if (!roadmapSkills.length) return courses;
+  const matched = courses.filter((c) => isTagMatch(c, roadmapSkills));
+  const rest = courses.filter((c) => !isTagMatch(c, roadmapSkills));
+  return [...matched, ...rest];
+}
 
+export function matchRoadmapCourses(courses: Course[], recommendedNames: string[]): Course[] {
+  if (!recommendedNames.length || !courses.length) return [];
   return recommendedNames
     .map((name) => {
       const nameLower = name.toLowerCase().trim();
       return courses.find((c) => {
         const titleLower = c.title.toLowerCase();
-        // Exact or partial title match
+        if (titleLower === nameLower) return true;
         if (titleLower.includes(nameLower) || nameLower.includes(titleLower)) return true;
-        // Match key words (ignoring small words like 'for', 'the', 'and')
-        const keywords = nameLower.split(" ").filter(w => w.length > 3);
-        return keywords.some(kw => titleLower.includes(kw));
+        return nameLower.split(" ").filter((w) => w.length > 3).some((word) => titleLower.includes(word));
       });
     })
     .filter((c): c is Course => !!c)
@@ -144,140 +112,56 @@ export function getSkillLabel(roadmapSkills: string[]): string {
 export function detectGoalType(goal: string): "freelancer" | "business" | "job" | "general" {
   if (!goal) return "general";
   const g = goal.toLowerCase();
-  if (g.includes("business") || g.includes("online grow") || g.includes("shop") || g.includes("store")) return "business";
-  if (g.includes("job") || g.includes("naukri") || g.includes("company")) return "job";
-  if (g.includes("freelanc") || g.includes("fiverr") || g.includes("client") || g.includes("income")) return "freelancer";
+  if (g.includes("business") || g.includes("online grow") || g.includes("online business") ||
+      g.includes("shop") || g.includes("store") || g.includes("sell") || g.includes("product") ||
+      g.includes("e-commerce") || g.includes("ecommerce") || g.includes("brand") || g.includes("grow karna")) {
+    return "business";
+  }
+  if (g.includes("job") || g.includes("naukri") || g.includes("employ") ||
+      g.includes("company") || g.includes("office") || g.includes("salary") || g.includes("career") || g.includes("hire")) {
+    return "job";
+  }
+  if (g.includes("freelanc") || g.includes("fiverr") || g.includes("upwork") || g.includes("client") ||
+      g.includes("gig") || g.includes("remote") || g.includes("online earn") || g.includes("paise") ||
+      g.includes("income") || g.includes("ghar say") || g.includes("ghar se")) {
+    return "freelancer";
+  }
   return "general";
 }
 
-export interface FirstClientStep {
-  step: string;
-  title: string;
-  body: string;
-  color: string;
-  icon: string;
-}
-
-export function buildFirstClientSteps(skillLabel: string, goal?: string): FirstClientStep[] {
+export function buildFirstClientSteps(skillLabel: string, goal?: string) {
   const goalType = detectGoalType(goal || "");
-  const skill = skillLabel && skillLabel !== "Your Skill" ? skillLabel : "your skill";
 
   if (goalType === "business") {
     return [
-      {
-        step: "1",
-        title: "Define Your Offer",
-        body: `Write down exactly what you'll sell using ${skill} — one clear product or service, not five vague ideas.`,
-        color: "from-emerald-500 to-teal-500",
-        icon: "🎯",
-      },
-      {
-        step: "2",
-        title: "Set Up Your Storefront",
-        body: "Create a simple Facebook Page or Instagram business profile. Add 3-5 clear photos and your pricing.",
-        color: "from-teal-500 to-cyan-500",
-        icon: "🏪",
-      },
-      {
-        step: "3",
-        title: "Get Your First 10 Followers",
-        body: "Share your page in 3-4 relevant Facebook groups and with your WhatsApp contacts. Ask friends to share too.",
-        color: "from-cyan-500 to-blue-500",
-        icon: "📣",
-      },
-      {
-        step: "4",
-        title: "Run a Launch Offer",
-        body: "Offer a small discount or bonus for your first 5 customers — this builds reviews and word-of-mouth fast.",
-        color: "from-blue-500 to-indigo-500",
-        icon: "🎁",
-      },
-      {
-        step: "5",
-        title: "Collect & Showcase Reviews",
-        body: "Ask every happy customer for a short review or photo. Post these — social proof sells more than ads.",
-        color: "from-indigo-500 to-purple-500",
-        icon: "⭐",
-      },
+      { step: "01", title: `${skillLabel} se apni Online Presence Banao`, body: `Facebook Page aur Instagram Business account banao. Profile complete karo — logo, bio, aur ${skillLabel} service clearly mention karo. Yahi tumhara digital shop front hai.`, color: "from-blue-600 to-blue-700", icon: "🏪" },
+      { step: "02", title: "Pehle 5 Customers Free Ya Discounted Deno", body: `Apne circles (family, friends, mohalla) mein announce karo ke tum launch ho rahe ho. Pehle 5 customers ko discount ya free service do — taaki reviews aur word-of-mouth start ho.`, color: "from-emerald-600 to-emerald-700", icon: "🎁" },
+      { step: "03", title: "WhatsApp Business + Broadcast List", body: `WhatsApp Business setup karo. Catalog mein apni services/products add karo. Broadcast list banao — roz ek helpful message ya offer bhejo existing contacts ko.`, color: "from-green-600 to-green-700", icon: "📱" },
+      { step: "04", title: `Facebook Ads — Rs. 200/day se Shuru Karo`, body: `Apni city mein targeted Facebook ad chalao — budget sirf Rs. 200/day. ${skillLabel} ki service ya offer ka ek clear ad banao. Pehle 3 din test karo, jo ad chalti hai usy scale karo.`, color: "from-indigo-600 to-indigo-700", icon: "📢" },
+      { step: "05", title: "Reviews Collect Karo", body: `Har khush customer se Google Review ya Facebook Review maango. Ek simple message: "Aapka experience kaisa raha? Review dein ge toh bohot meharbani hogi." Social proof = more customers.`, color: "from-yellow-600 to-yellow-700", icon: "⭐" },
+      { step: "06", title: "Referral System Shuru Karo", body: `Customers ko batao: "Ek dost refer karo, aapko 10% discount milega." Yeh system automatically new customers laata rehta hai bina advertising ke.`, color: "from-pink-600 to-pink-700", icon: "🤝" },
     ];
   }
 
   if (goalType === "job") {
     return [
-      {
-        step: "1",
-        title: "Build a Focused Resume",
-        body: `Update your resume to highlight ${skill} skills and any projects, even small or personal ones.`,
-        color: "from-emerald-500 to-teal-500",
-        icon: "📄",
-      },
-      {
-        step: "2",
-        title: "Create a LinkedIn Profile",
-        body: "Set up a professional LinkedIn with a clear headline mentioning your skill and what you're looking for.",
-        color: "from-teal-500 to-cyan-500",
-        icon: "💼",
-      },
-      {
-        step: "3",
-        title: "Apply to 5 Jobs Daily",
-        body: "Use Rozee.pk, LinkedIn, and Indeed. Apply consistently rather than waiting for the 'perfect' listing.",
-        color: "from-cyan-500 to-blue-500",
-        icon: "📬",
-      },
-      {
-        step: "4",
-        title: "Practice Interview Answers",
-        body: "Prepare 3-4 stories about your skills and achievements you can use in almost any interview question.",
-        color: "from-blue-500 to-indigo-500",
-        icon: "🎤",
-      },
-      {
-        step: "5",
-        title: "Follow Up Professionally",
-        body: "Send a polite follow-up email a week after applying or interviewing — it keeps you on the recruiter's radar.",
-        color: "from-indigo-500 to-purple-500",
-        icon: "✉️",
-      },
+      { step: "01", title: `${skillLabel} Portfolio / GitHub Banao`, body: `2-3 real ya practice projects banao aur GitHub pe upload karo ya PDF portfolio tayyar karo. Employers ko proof chahiye hota hai — CV nahi, kaam dekhtay hain.`, color: "from-blue-600 to-blue-700", icon: "💼" },
+      { step: "02", title: "LinkedIn Profile Update Karo", body: `Professional photo, ${skillLabel} headline, aur skills section fill karo. Rozana 3-5 relevant connections add karo. Hiring managers LinkedIn pe actively search kartay hain.`, color: "from-indigo-600 to-indigo-700", icon: "🔗" },
+      { step: "03", title: "Pakistan Job Boards Apply Karo", body: `Rozana Rozee.pk, Mustakbil, aur LinkedIn Jobs pe apply karo. ${skillLabel} keyword se filter karo. Cover letter personalize karo — generic letter mat bhejo.`, color: "from-purple-600 to-purple-700", icon: "📋" },
+      { step: "04", title: "Remote Jobs Bhi Explore Karo", body: `Remote.co, We Work Remotely, aur AngelList pe ${skillLabel} ki remote positions dhundo. Pakistan se internationally kaam karna ab possible hai — dollar income ghar baithe.`, color: "from-cyan-600 to-cyan-700", icon: "🌍" },
+      { step: "05", title: "Mock Interviews Practice Karo", body: `Glassdoor pe company-specific interview questions dhundo. AI tools ya kisi dost ke saath mock interview karo. ${skillLabel} ke technical questions prepare karo.`, color: "from-orange-600 to-orange-700", icon: "🎯" },
+      { step: "06", title: "Referral Maango — Network Use Karo", body: `LinkedIn pe un logon se connect karo jo aapki target company mein kaam kar rahay hain. Politely poochho ke koi opening hai ya referral de saktay hain. 70% jobs referral se milti hain.`, color: "from-emerald-600 to-emerald-700", icon: "🤝" },
     ];
   }
 
-  // Default: freelancer path
   return [
-    {
-      step: "1",
-      title: "Build a Mini Portfolio",
-      body: `Create 2-3 sample pieces showing your ${skill} ability — even practice projects work if you have no clients yet.`,
-      color: "from-emerald-500 to-teal-500",
-      icon: "🎨",
-    },
-    {
-      step: "2",
-      title: "Set Up Your Profile",
-      body: "Create a Fiverr or Upwork profile with a clear title, your portfolio, and a friendly, specific bio.",
-      color: "from-teal-500 to-cyan-500",
-      icon: "👤",
-    },
-    {
-      step: "3",
-      title: "Price to Win Your First Review",
-      body: "Price slightly below market for your first 2-3 gigs. Reviews matter more than profit at the start.",
-      color: "from-cyan-500 to-blue-500",
-      icon: "🏷️",
-    },
-    {
-      step: "4",
-      title: "Send Personalized Proposals",
-      body: "Apply to 5 relevant gigs daily with a short, specific message — mention their exact project, not a copy-paste pitch.",
-      color: "from-blue-500 to-indigo-500",
-      icon: "📨",
-    },
-    {
-      step: "5",
-      title: "Over-Deliver & Ask for Reviews",
-      body: "Deliver a little more than promised on your first orders, then politely ask for a 5-star review.",
-      color: "from-indigo-500 to-purple-500",
-      icon: "⭐",
-    },
+    { step: "01", title: `${skillLabel} Portfolio Banao`, body: `${skillLabel} ke 2-3 sample projects banao — real clients na hon to fictional ya self-initiated projects bhi chalte hain. Ek clean PDF ya website pe showcase karo.`, color: "from-blue-600 to-blue-700", icon: "🗂️" },
+    { step: "02", title: "Fiverr / Upwork Gig Launch Karo", body: `${skillLabel} service ka ek strong gig banao. Shuru mein competitive rate rakho, aur pehle 1-2 free ya discounted orders se 5-star reviews collect karo.`, color: "from-purple-600 to-purple-700", icon: "🚀" },
+    { step: "03", title: "Local Businesses Ko Approach Karo", body: `Apne sheher ke businesses ko WhatsApp ya direct message karo. Batao ke tum unki ${skillLabel} problems solve kar sakte ho. Ek free audit ya sample offer karo.`, color: "from-emerald-600 to-emerald-700", icon: "🏪" },
+    { step: "04", title: "Facebook Groups & LinkedIn Use Karo", body: `${skillLabel} se related Facebook groups join karo. Roz ek helpful post ya answer daalo. Jab log tumhari expertise dekhein ge, woh khud DM karein ge.`, color: "from-orange-600 to-orange-700", icon: "📱" },
+    { step: "05", title: "Cold Outreach Script", body: `"Hi [Name], maine aapki [profile/website] dekhi — aapko ${skillLabel} mein [specific problem] hai. Main help kar sakta/sakti hoon. Kya 10 min call ho sakti hai?" Short aur specific rakho.`, color: "from-pink-600 to-pink-700", icon: "✉️" },
+    { step: "06", title: "Referrals Maango", body: `Jab pehla client mil jaye aur kaam achha ho, poochho: 'Kya aap mujhe kisi aur ke saath refer kar sakte hain?' Word-of-mouth fastest aur free growth hack hai.`, color: "from-cyan-600 to-cyan-700", icon: "🤝" },
   ];
 }
+
+export const STEP_COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#a855f7", "#ef4444", "#06b6d4"];
