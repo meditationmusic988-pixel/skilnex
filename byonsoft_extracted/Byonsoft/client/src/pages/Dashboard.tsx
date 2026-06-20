@@ -126,7 +126,7 @@ export default function Dashboard() {
   // ── Derived state ──
   const price = priceSetting?.subscription_price ?? 750;
   const premium = checkPremium(user);
-  const hasAssessment = !!(skillScore?.goal);
+  const hasAssessment = !!(skillScore?.roadmap_result);
   const completedCount = useMemo(() => countCompleted(progressList), [progressList]);
   const inProgressCount = useMemo(() => countInProgress(progressList), [progressList]);
   const totalCourses = courses.length;
