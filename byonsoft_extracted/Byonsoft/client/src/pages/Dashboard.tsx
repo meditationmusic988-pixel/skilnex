@@ -11,7 +11,7 @@ import { PWAInstallButton } from "@/components/PWAInstallButton";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { WelcomeHero } from "@/components/dashboard/WelcomeHero";
 import { StatsOverview } from "@/components/dashboard/StatsOverview";
-import { SkillResultCard } from "@/components/dashboard/SkillResultCard";
+import { AIRoadmapSection } from "@/components/dashboard/AIRoadmapSection";
 import { FirstClientGuide } from "@/components/dashboard/FirstClientGuide";
 import { CoursesGrid } from "@/components/dashboard/CoursesGrid";
 import { PricingSection } from "@/components/dashboard/PricingSection";
@@ -22,7 +22,7 @@ import { DashboardFooter } from "@/components/dashboard/DashboardFooter";
 import { isPremium as checkPremium } from "@/utils/premium";
 import { countCompleted, countInProgress } from "@/utils/progress";
 import {
-  parseRoadmap,
+  mapCareerAnalysisToRoadmap,
   extractRoadmapSkills,
   isTagMatch,
   matchRoadmapCourses,
@@ -123,10 +123,26 @@ export default function Dashboard() {
     staleTime: 1000 * 60 * 5,
   });
 
+  // ── SINGLE SOURCE OF TRUTH ──
+  // This is the SAME endpoint CareerResult.tsx uses right after the skill test.
+  // Using it here too means the Dashboard always matches what the user saw
+  // on the results page — no more two different AI answers disagreeing.
+  const { data: careerAnalysis } = useQuery<any>({
+    queryKey: ["/api/career-results/me/latest"],
+    queryFn: async () => {
+      const token = localStorage.getItem("token");
+      const r = await fetch("/api/career-results/me/latest", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) return null;
+      return r.json();
+    },
+  });
+
   // ── Derived state ──
   const price = priceSetting?.subscription_price ?? 750;
   const premium = checkPremium(user);
-  const hasAssessment = !!(skillScore?.roadmap_result);
+  const hasAssessment = !!careerAnalysis || !!(skillScore?.goal);
   const completedCount = useMemo(() => countCompleted(progressList), [progressList]);
   const inProgressCount = useMemo(() => countInProgress(progressList), [progressList]);
   const totalCourses = courses.length;
@@ -134,17 +150,20 @@ export default function Dashboard() {
   const premiumCount = giveawayStats?.activeUsers ?? 0;
   const isPhase2 = premiumCount >= 300;
 
-  // ── Roadmap ──
-  const roadmap = useMemo(() => parseRoadmap(skillScore), [skillScore]);
-  const roadmapSkills = useMemo(() => extractRoadmapSkills(skillScore), [skillScore]);
+  // ── Roadmap now comes from career_analyses (same as results page) ──
+  const roadmap = useMemo(
+    () => mapCareerAnalysisToRoadmap(careerAnalysis),
+    [careerAnalysis]
+  );
 
-  // ── Matched courses: AI recommended names → actual app courses ──
+  const roadmapSkills = useMemo(() => extractRoadmapSkills(roadmap), [roadmap]);
+
+  // ── Matched courses ──
   const matchedCourses = useMemo(
     () => matchRoadmapCourses(courses, roadmap?.recommended_courses ?? []),
     [courses, roadmap]
   );
 
-  // ── Sort: matched courses top pe, baaki neeche ──
   const sortedCourses = useMemo(() => {
     const matchedIds = new Set(matchedCourses.map((c) => c.id));
     const rest = courses.filter((c) => !matchedIds.has(c.id));
@@ -159,7 +178,6 @@ export default function Dashboard() {
   const hasRoadmapMatches = matchedCourses.length > 0;
   const skillLabel = useMemo(() => getSkillLabel(roadmapSkills), [roadmapSkills]);
 
-  // ── First client steps — goal ke basis pe alag ──
   const firstClientSteps = useMemo(
     () => buildFirstClientSteps(skillLabel, skillScore?.goal ?? ""),
     [skillLabel, skillScore?.goal]
@@ -212,10 +230,8 @@ export default function Dashboard() {
   const openUpgrade = useCallback(() => setUpgradeOpen(true), []);
   const closeUpgrade = useCallback(() => setUpgradeOpen(false), []);
 
-  // ── Render ──
   return (
     <div className="min-h-screen bg-[#0B1120] text-white">
-      {/* Header */}
       <DashboardHeader
         userName={user?.name ?? ""}
         isPremium={premium}
@@ -225,10 +241,8 @@ export default function Dashboard() {
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
-        {/* PWA install */}
         <PWAInstallButton variant="banner" />
 
-        {/* Welcome */}
         <WelcomeHero
           userName={user?.name ?? ""}
           isPremium={premium}
@@ -239,7 +253,6 @@ export default function Dashboard() {
           onRefresh={handleRefreshUser}
         />
 
-        {/* Stats row — career result bhi dikhao */}
         <StatsOverview
           isPhase2={isPhase2}
           completedCount={completedCount}
@@ -247,32 +260,17 @@ export default function Dashboard() {
           hasAssessment={hasAssessment}
           inProgressCount={inProgressCount}
           onAssessmentClick={() => setLocation("/skill-test?new=1")}
-          result={(() => { try { let p = JSON.parse(skillScore?.roadmap_result ?? ""); if (typeof p === "string") p = JSON.parse(p); return p?.skill_score ? p : null; } catch { return null; } })()}
+          result={careerAnalysis}
         />
 
-        {/* Skill Test Result — exact same as SkillTest Phase 4 */}
-        {hasAssessment ? (
-          <SkillResultCard
-            skillScore={skillScore}
-            onRetake={() => setLocation("/skill-test?new=1")}
-          />
-        ) : (
-          <div className="relative overflow-hidden rounded-2xl border border-dashed border-indigo-500/30 bg-slate-900/40 p-10 text-center space-y-4">
-            <div className="w-14 h-14 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center mx-auto">
-              <span className="text-2xl">🧠</span>
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-white mb-1">No Career Roadmap Yet</h2>
-              <p className="text-slate-400 text-sm">Complete the AI Career Assessment to get your personalized roadmap.</p>
-            </div>
-            <button onClick={() => setLocation("/skill-test?new=1")}
-              className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-8 py-3 rounded-xl text-sm transition-colors">
-              Start Assessment
-            </button>
-          </div>
-        )}
+        {/* AI Roadmap — now uses the SAME result as the post-test results page */}
+        <AIRoadmapSection
+          roadmap={roadmap}
+          matchedCourses={matchedCourses}
+          onImprove={() => setLocation("/skill-test?new=1")}
+          onGetRoadmap={() => setLocation("/skill-test?new=1")}
+        />
 
-        {/* First Client Guide — goal ke basis pe personalized */}
         <FirstClientGuide
           steps={firstClientSteps}
           skillLabel={skillLabel}
@@ -281,16 +279,13 @@ export default function Dashboard() {
           onUpgrade={openUpgrade}
         />
 
-        {/* Giveaway banner */}
         <MegaLaunchBanner isPremium={premium} onUpgrade={openUpgrade} />
 
-        {/* Referral + Rewards */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <ReferralCard />
           <ReferralRewards />
         </div>
 
-        {/* Giveaway tracker */}
         {giveawayStats && (
           <GiveawayTracker
             premiumCount={premiumCount}
@@ -300,7 +295,6 @@ export default function Dashboard() {
           />
         )}
 
-        {/* Pricing (free users only) */}
         {!premium && (
           <PricingSection
             price={price}
@@ -309,7 +303,6 @@ export default function Dashboard() {
           />
         )}
 
-        {/* Courses — sorted with matched on top */}
         <CoursesGrid
           courses={sortedCourses}
           progressList={progressList}
@@ -326,10 +319,7 @@ export default function Dashboard() {
         />
       </main>
 
-      {/* Footer */}
       <DashboardFooter />
-
-      {/* Upgrade modal */}
       <UpgradeModal open={upgradeOpen} onClose={closeUpgrade} />
     </div>
   );
