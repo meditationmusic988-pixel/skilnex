@@ -27,10 +27,7 @@ export function toArray(val: unknown): string[] {
 export function parseRoadmap(skillScore: SkillScore | null | undefined): ParsedRoadmap | null {
   if (!skillScore?.roadmap_result) return null;
   try {
-    let raw = JSON.parse(skillScore.roadmap_result);
-    // Handle double-stringified JSON
-    if (typeof raw === "string") raw = JSON.parse(raw);
-    if (!raw || typeof raw !== "object") return null;
+    const raw = JSON.parse(skillScore.roadmap_result);
     return {
       ...raw,
       recommended_courses: toArray(raw.recommended_courses),
@@ -83,21 +80,47 @@ export function matchRoadmapCourses(
 ): Course[] {
   if (!recommendedNames.length || !courses.length) return [];
 
+  // Extract meaningful keywords from AI recommended name
+  const STOP_WORDS = new Set(["course", "complete", "learn", "and", "the", "with", "for", "to", "of", "in", "a", "an"]);
+
+  function keywords(name: string): string[] {
+    return name.toLowerCase()
+      .replace(/[^a-z0-9 ]/g, " ")
+      .split(/\s+/)
+      .filter(w => w.length > 2 && !STOP_WORDS.has(w));
+  }
+
+  function score(courseTitle: string, aiName: string): number {
+    const cWords = keywords(courseTitle);
+    const aWords = keywords(aiName);
+    if (!cWords.length || !aWords.length) return 0;
+    let matches = 0;
+    for (const aw of aWords) {
+      if (cWords.some(cw => cw.includes(aw) || aw.includes(cw))) matches++;
+    }
+    return matches / Math.max(aWords.length, 1);
+  }
+
+  const used = new Set<number>();
+
   return recommendedNames
     .map((name) => {
-      const nameLower = name.toLowerCase().trim();
-      return courses.find((c) => {
-        const titleLower = c.title.toLowerCase();
-        if (titleLower === nameLower) return true;
-        if (titleLower.includes(nameLower) || nameLower.includes(titleLower)) return true;
-        return nameLower
-          .split(" ")
-          .filter((w) => w.length > 3)
-          .some((word) => titleLower.includes(word));
-      });
+      // Score all courses against this AI name
+      let best: Course | null = null;
+      let bestScore = 0;
+      for (const c of courses) {
+        if (used.has(c.id)) continue;
+        const s = score(c.title, name);
+        if (s > bestScore) { bestScore = s; best = c; }
+      }
+      // Only match if at least 1 keyword matches
+      if (best && bestScore >= 0.25) {
+        used.add(best.id);
+        return best;
+      }
+      return null;
     })
-    .filter((c): c is Course => !!c)
-    .filter((c, i, arr) => arr.findIndex((x) => x.id === c.id) === i);
+    .filter((c): c is Course => c !== null);
 }
 
 export function getSkillLabel(roadmapSkills: string[]): string {
