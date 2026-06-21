@@ -22,7 +22,7 @@ import { DashboardFooter } from "@/components/dashboard/DashboardFooter";
 import { isPremium as checkPremium } from "@/utils/premium";
 import { countCompleted, countInProgress } from "@/utils/progress";
 import {
-  mapCareerAnalysisToRoadmap,
+  parseRoadmap,
   extractRoadmapSkills,
   isTagMatch,
   matchRoadmapCourses,
@@ -123,26 +123,20 @@ export default function Dashboard() {
     staleTime: 1000 * 60 * 5,
   });
 
-  // ── SINGLE SOURCE OF TRUTH ──
-  // This is the SAME endpoint CareerResult.tsx uses right after the skill test.
-  // Using it here too means the Dashboard always matches what the user saw
-  // on the results page — no more two different AI answers disagreeing.
-  const { data: careerAnalysis } = useQuery<any>({
-    queryKey: ["/api/career-results/me/latest"],
-    queryFn: async () => {
-      const token = localStorage.getItem("token");
-      const r = await fetch("/api/career-results/me/latest", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!r.ok) return null;
-      return r.json();
-    },
-  });
+  // ── Parse roadmap result from skillScore ──
+  const roadmapParsed = useMemo(() => {
+    if (!skillScore?.roadmap_result) return null;
+    try {
+      let p = JSON.parse(skillScore.roadmap_result);
+      if (typeof p === "string") p = JSON.parse(p);
+      return p && typeof p === "object" ? p : null;
+    } catch { return null; }
+  }, [skillScore]);
 
   // ── Derived state ──
   const price = priceSetting?.subscription_price ?? 750;
   const premium = checkPremium(user);
-  const hasAssessment = !!careerAnalysis || !!(skillScore?.goal);
+  const hasAssessment = !!(skillScore?.goal);
   const completedCount = useMemo(() => countCompleted(progressList), [progressList]);
   const inProgressCount = useMemo(() => countInProgress(progressList), [progressList]);
   const totalCourses = courses.length;
@@ -150,20 +144,17 @@ export default function Dashboard() {
   const premiumCount = giveawayStats?.activeUsers ?? 0;
   const isPhase2 = premiumCount >= 300;
 
-  // ── Roadmap now comes from career_analyses (same as results page) ──
-  const roadmap = useMemo(
-    () => mapCareerAnalysisToRoadmap(careerAnalysis),
-    [careerAnalysis]
-  );
+  // ── Roadmap ──
+  const roadmap = useMemo(() => parseRoadmap(skillScore), [skillScore]);
+  const roadmapSkills = useMemo(() => extractRoadmapSkills(skillScore), [skillScore]);
 
-  const roadmapSkills = useMemo(() => extractRoadmapSkills(roadmap), [roadmap]);
-
-  // ── Matched courses ──
+  // ── Matched courses: AI recommended names → actual app courses ──
   const matchedCourses = useMemo(
     () => matchRoadmapCourses(courses, roadmap?.recommended_courses ?? []),
     [courses, roadmap]
   );
 
+  // ── Sort: matched courses top pe, baaki neeche ──
   const sortedCourses = useMemo(() => {
     const matchedIds = new Set(matchedCourses.map((c) => c.id));
     const rest = courses.filter((c) => !matchedIds.has(c.id));
@@ -178,6 +169,7 @@ export default function Dashboard() {
   const hasRoadmapMatches = matchedCourses.length > 0;
   const skillLabel = useMemo(() => getSkillLabel(roadmapSkills), [roadmapSkills]);
 
+  // ── First client steps — goal ke basis pe alag ──
   const firstClientSteps = useMemo(
     () => buildFirstClientSteps(skillLabel, skillScore?.goal ?? ""),
     [skillLabel, skillScore?.goal]
@@ -230,8 +222,10 @@ export default function Dashboard() {
   const openUpgrade = useCallback(() => setUpgradeOpen(true), []);
   const closeUpgrade = useCallback(() => setUpgradeOpen(false), []);
 
+  // ── Render ──
   return (
     <div className="min-h-screen bg-[#0B1120] text-white">
+      {/* Header */}
       <DashboardHeader
         userName={user?.name ?? ""}
         isPremium={premium}
@@ -241,8 +235,10 @@ export default function Dashboard() {
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+        {/* PWA install */}
         <PWAInstallButton variant="banner" />
 
+        {/* Welcome */}
         <WelcomeHero
           userName={user?.name ?? ""}
           isPremium={premium}
@@ -253,6 +249,7 @@ export default function Dashboard() {
           onRefresh={handleRefreshUser}
         />
 
+        {/* Stats row — career result bhi dikhao */}
         <StatsOverview
           isPhase2={isPhase2}
           completedCount={completedCount}
@@ -260,10 +257,13 @@ export default function Dashboard() {
           hasAssessment={hasAssessment}
           inProgressCount={inProgressCount}
           onAssessmentClick={() => setLocation("/skill-test?new=1")}
-          result={careerAnalysis}
+          careerPath={roadmapParsed?.career_paths?.[0]}
+          income6m={roadmapParsed?.expected_income?.split("\n")[0]?.trim()}
+          income12m={roadmapParsed?.timeline}
+          shareId={undefined}
         />
 
-        {/* AI Roadmap — now uses the SAME result as the post-test results page */}
+        {/* AI Roadmap — matched courses pass karo */}
         <AIRoadmapSection
           roadmap={roadmap}
           matchedCourses={matchedCourses}
@@ -271,6 +271,7 @@ export default function Dashboard() {
           onGetRoadmap={() => setLocation("/skill-test?new=1")}
         />
 
+        {/* First Client Guide — goal ke basis pe personalized */}
         <FirstClientGuide
           steps={firstClientSteps}
           skillLabel={skillLabel}
@@ -279,13 +280,16 @@ export default function Dashboard() {
           onUpgrade={openUpgrade}
         />
 
+        {/* Giveaway banner */}
         <MegaLaunchBanner isPremium={premium} onUpgrade={openUpgrade} />
 
+        {/* Referral + Rewards */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <ReferralCard />
           <ReferralRewards />
         </div>
 
+        {/* Giveaway tracker */}
         {giveawayStats && (
           <GiveawayTracker
             premiumCount={premiumCount}
@@ -295,6 +299,7 @@ export default function Dashboard() {
           />
         )}
 
+        {/* Pricing (free users only) */}
         {!premium && (
           <PricingSection
             price={price}
@@ -303,6 +308,7 @@ export default function Dashboard() {
           />
         )}
 
+        {/* Courses — sorted with matched on top */}
         <CoursesGrid
           courses={sortedCourses}
           progressList={progressList}
@@ -319,7 +325,10 @@ export default function Dashboard() {
         />
       </main>
 
+      {/* Footer */}
       <DashboardFooter />
+
+      {/* Upgrade modal */}
       <UpgradeModal open={upgradeOpen} onClose={closeUpgrade} />
     </div>
   );
