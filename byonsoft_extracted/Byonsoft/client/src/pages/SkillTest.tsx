@@ -277,6 +277,27 @@ Respond ONLY with valid JSON (no markdown, no extra text):
       if (data.error) throw new Error(data.error);
       const parsed = typeof data === "string" ? JSON.parse(data) : data;
       if (msgInt) clearInterval(msgInt);
+
+      // Map AI course names to actual app course titles
+      if (Array.isArray(parsed.recommended_courses) && courses.length) {
+        const stop = new Set(["course","complete","learn","and","the","with","for","to","of","in","a","an","ka","ki","ke"]);
+        const kw = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g," ").split(" ").filter(w=>w.length>2&&!stop.has(w));
+        const used = new Set<number>();
+        parsed.recommended_courses = parsed.recommended_courses.map((aiName: string) => {
+          const aiWords = kw(aiName);
+          let best: Course|null = null, bestScore = 0;
+          for (const c of courses) {
+            if (used.has(c.id)) continue;
+            const cWords = kw(c.title);
+            const matched = aiWords.filter(aw=>cWords.some(cw=>cw.includes(aw)||aw.includes(cw))).length;
+            const sc = matched / Math.max(aiWords.length, 1);
+            if (sc > bestScore) { bestScore = sc; best = c; }
+          }
+          if (best && bestScore >= 0.25) { used.add(best.id); return best.title; }
+          return aiName;
+        });
+      }
+
       setResult(parsed);
       queryClient.invalidateQueries({ queryKey: ["/api/skills"] });
       goPhase(4);
