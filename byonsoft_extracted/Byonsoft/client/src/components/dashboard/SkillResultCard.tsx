@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import {
   RotateCcw, TrendingUp, Award, Star, CheckCircle2,
   Target, ChevronRight, Briefcase, DollarSign,
-  BookOpen, ListOrdered
+  BookOpen, ListOrdered, Share2
 } from "lucide-react";
 
 interface RoadmapResult {
@@ -92,6 +92,27 @@ export function SkillResultCard({ skillScore, onRetake }: SkillResultCardProps) 
 
   if (!skillScore?.roadmap_result) return null;
 
+  const handleShare = (r: RoadmapResult) => {
+    const text = `🚀 Maine Skilnex AI Career Assessment complete ki!
+
+📊 Mera Skill Score: ${r.skill_score}/100 (${r.skill_level})
+💼 Career Paths: ${(r.career_paths ?? []).slice(0, 2).join(", ")}
+💰 Expected Income: ${r.expected_income}
+⏱ Timeline: ${r.timeline}
+
+AI ne mujhe mera personalized career roadmap diya!
+Aap bhi try karo 👇
+https://skilnex-production-d029.up.railway.app/skill-test?new=1
+
+#Skilnex #Pakistan #OnlineEarning`;
+
+    if (navigator.share) {
+      navigator.share({ title: "Mera Skilnex Career Report", text });
+    } else {
+      navigator.clipboard.writeText(text).then(() => alert("Result copy ho gaya! Paste karke share karo."));
+    }
+  };
+
   let result: RoadmapResult | null = null;
   try {
     let parsed = JSON.parse(skillScore.roadmap_result);
@@ -110,10 +131,16 @@ export function SkillResultCard({ skillScore, onRetake }: SkillResultCardProps) 
           <h2 className="text-xl font-black text-white">Aapka Career Report</h2>
           <p className="text-slate-500 text-xs mt-0.5">Personalized by Skilnex AI</p>
         </div>
-        <button onClick={onRetake}
-          className="flex items-center gap-1.5 text-xs text-slate-400 border border-slate-700 rounded-lg px-3 py-2 hover:border-slate-500 transition-colors">
-          <RotateCcw className="w-3.5 h-3.5" /> Retake
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={() => handleShare(result)}
+            className="flex items-center gap-1.5 text-xs text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 rounded-lg px-3 py-2 hover:bg-emerald-500/20 transition-colors font-semibold">
+            <Share2 className="w-3.5 h-3.5" /> Share
+          </button>
+          <button onClick={onRetake}
+            className="flex items-center gap-1.5 text-xs text-slate-400 border border-slate-700 rounded-lg px-3 py-2 hover:border-slate-500 transition-colors">
+            <RotateCcw className="w-3.5 h-3.5" /> Retake
+          </button>
+        </div>
       </div>
 
       {/* Score ring */}
@@ -214,6 +241,12 @@ export function SkillResultCard({ skillScore, onRetake }: SkillResultCardProps) 
           ))}
         </div>
       </div>
+    </div>
+      {/* Share CTA at bottom */}
+      <button onClick={() => handleShare(result)}
+        className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-3.5 rounded-xl text-sm transition-all">
+        <Share2 className="w-4 h-4" /> Apna Result Share Karo — Doston Ko Inspire Karo!
+      </button>
     </div>
   );
 }
