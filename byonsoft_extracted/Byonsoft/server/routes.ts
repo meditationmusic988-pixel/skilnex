@@ -267,10 +267,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       try {
         const parsed = JSON.parse(cleaned.slice(jsonStart, jsonEnd + 1));
         const result = {
+          skill_level:         typeof parsed.skill_level === "string" ? parsed.skill_level : "Beginner",
+          skill_score:         typeof parsed.skill_score === "number" ? parsed.skill_score : 0,
+          confidence_scores:   parsed.confidence_scores && typeof parsed.confidence_scores === "object" ? parsed.confidence_scores : { technical: 50, mindset: 50, market_awareness: 50 },
+          strengths:           Array.isArray(parsed.strengths) ? parsed.strengths : [],
+          gaps:                Array.isArray(parsed.gaps) ? parsed.gaps : [],
           recommended_courses: Array.isArray(parsed.recommended_courses) ? parsed.recommended_courses : [],
-          career_paths: Array.isArray(parsed.career_paths) ? parsed.career_paths : [],
-          expected_income: typeof parsed.expected_income === "string" ? parsed.expected_income : "",
-          learning_order: typeof parsed.learning_order === "string" ? parsed.learning_order : "",
+          career_paths:        Array.isArray(parsed.career_paths) ? parsed.career_paths : [],
+          expected_income:     typeof parsed.expected_income === "string" ? parsed.expected_income : "",
+          timeline:            typeof parsed.timeline === "string" ? parsed.timeline : "",
+          learning_order:      Array.isArray(parsed.learning_order) ? parsed.learning_order : (typeof parsed.learning_order === "string" ? [parsed.learning_order] : []),
+          motivation:          typeof parsed.motivation === "string" ? parsed.motivation : "",
         };
         await storage.upsertSkillScore({
           user_id: req.user!.id,
