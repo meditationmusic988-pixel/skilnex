@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import {
-  ArrowLeft, ArrowRight, Zap, RotateCcw, BookOpen,
+  ArrowLeft, ArrowRight, Zap, RotateCcw, BookOpen, Share2,
   Briefcase, DollarSign, ListOrdered, CheckCircle2,
   Smartphone, Laptop, Monitor, Layers,
   TrendingUp, Target, Award, Star, ChevronRight,
@@ -175,10 +175,6 @@ export default function SkillTest() {
   const [goal, setGoal] = useState("");
   const [existingSkill, setExistingSkill] = useState("");
   const [device, setDevice] = useState("");
-  const [incomeTarget, setIncomeTarget] = useState("");
-  const [timeAvailable, setTimeAvailable] = useState("");
-  const [currentSituation, setCurrentSituation] = useState("");
-  const [biggestChallenge, setBiggestChallenge] = useState("");
   const [skills, setSkills] = useState<SkillRating[]>(INITIAL_SKILLS);
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
   const [meterVals, setMeterVals] = useState([0, 0, 0]);
@@ -244,10 +240,6 @@ ${courseList}
 User profile:
 - Goal: ${goal}
 - Background: ${existingSkill}
-- Current Situation: ${currentSituation}
-- Monthly Income Target: ${incomeTarget}
-- Time Available per Day: ${timeAvailable}
-- Biggest Challenge: ${biggestChallenge}
 - Device: ${device}
 - Skill ratings (0=None, 1=Basic, 2=Okay, 3=Good, 4=Expert): ${ratedSkillsSummary}
 - Overall skill score: ${avgSkillScore}/100
@@ -262,8 +254,12 @@ Instructions:
 Respond ONLY with valid JSON (no markdown, no extra text):
 {
   "skill_level": "Beginner|Intermediate|Advanced",
-  "skill_score": ${avgSkillScore},
-  "confidence_scores": {"technical": 40, "mindset": 65, "market_awareness": 50},
+  "skill_score": <Calculate 0-100 based on user skill ratings. If all skills are 0/Bilkul Nahi, give score between 5-20. Never return 0.>,
+  "confidence_scores": {
+    "technical": <0-100, based on design/coding/video/photo skill ratings>,
+    "mindset": <0-100, based on sales/marketing/goal clarity>,
+    "market_awareness": <0-100, based on ecom/marketing/digital skills>
+  },
   "strengths": ["strength based on high-rated skills", "another strength"],
   "gaps": ["gap based on low-rated skills", "another gap"],
   "recommended_courses": ["Exact Course Title From List Above", "Exact Course Title From List Above", "Exact Course Title From List Above"],
@@ -298,7 +294,7 @@ Respond ONLY with valid JSON (no markdown, no extra text):
       const topSkills = [...skills].sort((a, b) => b.value - a.value).slice(0, 2).map(s => s.label);
       setResult({
         skill_level: avgSkillScore < 35 ? "Beginner" : avgSkillScore < 65 ? "Intermediate" : "Advanced",
-        skill_score: avgSkillScore || 30,
+        skill_score: Math.max(avgSkillScore, 15),
         confidence_scores: {
           technical: avgSkillScore,
           mindset: Math.min(avgSkillScore + 15, 100),
@@ -324,8 +320,30 @@ Respond ONLY with valid JSON (no markdown, no extra text):
     }
   };
 
+  const handleShare = () => {
+    if (!result) return;
+    const text = `🚀 Maine Skilnex AI Career Assessment complete ki!
+
+📊 Mera Skill Score: ${result.skill_score}/100 (${result.skill_level})
+💼 Career Paths: ${(result.career_paths ?? []).slice(0, 2).join(", ")}
+💰 Expected Income: ${result.expected_income}
+
+AI ne mujhe bataya ke main ${result.timeline} mein earn karna shuru kar sakta/sakti hoon!
+
+Aap bhi apna free AI Career Assessment lo 👇
+https://skilnex-production-d029.up.railway.app/skill-test?new=1
+
+#Skilnex #Pakistan #OnlineEarning #CareerAssessment`;
+
+    if (navigator.share) {
+      navigator.share({ title: "Mera Skilnex Career Report", text });
+    } else {
+      navigator.clipboard.writeText(text).then(() => alert("Result copy ho gaya! Paste karke share karo."));
+    }
+  };
+
   const handleRetake = () => {
-    setGoal(""); setExistingSkill(""); setDevice(""); setIncomeTarget(""); setTimeAvailable(""); setCurrentSituation(""); setBiggestChallenge("");
+    setGoal(""); setExistingSkill(""); setDevice("");
     setSkills(INITIAL_SKILLS.map(s => ({ ...s, value: 0 })));
     setResult(null); setLoadingMsgIdx(0); setMeterVals([0, 0, 0]);
     goPhase(0);
@@ -440,7 +458,7 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               <textarea
                 className="w-full bg-slate-800/60 border border-slate-700 rounded-xl text-white text-sm placeholder:text-slate-600 p-3 resize-none focus:outline-none focus:border-blue-500 transition-colors"
                 rows={3}
-                placeholder="e.g. Online earning seekhna hai, freelancing start karni hai, apna business grow karna hai..."
+                placeholder="e.g. Online earning seekhna hai, freelancing start karni hai..."
                 value={goal}
                 onChange={e => setGoal(e.target.value)}
               />
@@ -455,7 +473,7 @@ Respond ONLY with valid JSON (no markdown, no extra text):
               <textarea
                 className="w-full bg-slate-800/60 border border-slate-700 rounded-xl text-white text-sm placeholder:text-slate-600 p-3 resize-none focus:outline-none focus:border-blue-500 transition-colors"
                 rows={3}
-                placeholder="e.g. Student hoon, matriculation ki hai, 2 saal ki job experience hai..."
+                placeholder="e.g. Student hoon, matriculation ki hai, koi job nahi..."
                 value={existingSkill}
                 onChange={e => setExistingSkill(e.target.value)}
               />
@@ -464,98 +482,6 @@ Respond ONLY with valid JSON (no markdown, no extra text):
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Q3</span>
-                <span className="text-xs text-slate-600">Current Situation</span>
-              </div>
-              <p className="text-sm font-semibold text-white mb-3">Aap abhi kya kar rahe hain?</p>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: "🎓 Student", value: "Student" },
-                  { label: "💼 Job kar raha/rahi hoon", value: "Employed" },
-                  { label: "🏪 Business owner hoon", value: "Business Owner" },
-                  { label: "🔍 Berozgaar hoon", value: "Unemployed" },
-                  { label: "🏠 Ghar pe hoon", value: "Homemaker" },
-                  { label: "💻 Already freelancing", value: "Freelancer" },
-                ].map(({ label, value }) => (
-                  <button key={value} onClick={() => setCurrentSituation(value)}
-                    className={`p-3 rounded-xl border text-sm font-medium transition-all text-left
-                      ${currentSituation === value ? "bg-blue-600/20 border-blue-500 text-blue-300" : "bg-slate-800/40 border-slate-700 text-slate-400 hover:border-slate-600"}`}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Q4</span>
-                <span className="text-xs text-slate-600">Income Target</span>
-              </div>
-              <p className="text-sm font-semibold text-white mb-3">Aap monthly kitna kamana chahte hain?</p>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: "Rs. 20,000 – 40,000", value: "PKR 20,000-40,000/month" },
-                  { label: "Rs. 40,000 – 80,000", value: "PKR 40,000-80,000/month" },
-                  { label: "Rs. 80,000 – 1,50,000", value: "PKR 80,000-150,000/month" },
-                  { label: "Rs. 1,50,000+", value: "PKR 150,000+/month" },
-                ].map(({ label, value }) => (
-                  <button key={value} onClick={() => setIncomeTarget(value)}
-                    className={`p-3 rounded-xl border text-sm font-medium transition-all
-                      ${incomeTarget === value ? "bg-emerald-600/20 border-emerald-500 text-emerald-300" : "bg-slate-800/40 border-slate-700 text-slate-400 hover:border-slate-600"}`}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Q5</span>
-                <span className="text-xs text-slate-600">Time Available</span>
-              </div>
-              <p className="text-sm font-semibold text-white mb-3">Din mein kitne ghante de sakte hain learning ko?</p>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: "⏱ 1–2 ghante", value: "1-2 hours/day" },
-                  { label: "⏱ 3–4 ghante", value: "3-4 hours/day" },
-                  { label: "⏱ 5–6 ghante", value: "5-6 hours/day" },
-                  { label: "⏱ Full time (7+)", value: "7+ hours/day (full time)" },
-                ].map(({ label, value }) => (
-                  <button key={value} onClick={() => setTimeAvailable(value)}
-                    className={`p-3 rounded-xl border text-sm font-medium transition-all
-                      ${timeAvailable === value ? "bg-purple-600/20 border-purple-500 text-purple-300" : "bg-slate-800/40 border-slate-700 text-slate-400 hover:border-slate-600"}`}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Q6</span>
-                <span className="text-xs text-slate-600">Biggest Challenge</span>
-              </div>
-              <p className="text-sm font-semibold text-white mb-3">Aapka sabse bada masla kya hai abhi?</p>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: "💸 Paise nahi hain", value: "No money to invest" },
-                  { label: "⏰ Time nahi milta", value: "Not enough time" },
-                  { label: "📚 Skills nahi hain", value: "Lack of skills" },
-                  { label: "🧭 Guidance nahi", value: "No proper guidance" },
-                  { label: "😟 Confidence nahi", value: "Lack of confidence" },
-                  { label: "🌐 Internet / Device", value: "Limited internet or device access" },
-                ].map(({ label, value }) => (
-                  <button key={value} onClick={() => setBiggestChallenge(value)}
-                    className={`p-3 rounded-xl border text-sm font-medium transition-all text-left
-                      ${biggestChallenge === value ? "bg-orange-600/20 border-orange-500 text-orange-300" : "bg-slate-800/40 border-slate-700 text-slate-400 hover:border-slate-600"}`}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Q7</span>
                 <span className="text-xs text-slate-600">Device</span>
               </div>
               <p className="text-sm font-semibold text-white mb-3">Aapke paas kaunsa device hai?</p>
@@ -572,7 +498,7 @@ Respond ONLY with valid JSON (no markdown, no extra text):
 
             <button
               onClick={() => goPhase(2)}
-              disabled={goal.trim().length < 5 || existingSkill.trim().length < 3 || !device || !incomeTarget || !timeAvailable || !currentSituation || !biggestChallenge}
+              disabled={goal.trim().length < 5 || existingSkill.trim().length < 3 || !device}
               className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-colors text-sm">
               Skills Rate Karo <ArrowRight className="w-4 h-4" />
             </button>
@@ -667,9 +593,15 @@ Respond ONLY with valid JSON (no markdown, no extra text):
                 <h2 className="text-xl font-black text-white">Aapka Career Report</h2>
                 <p className="text-slate-500 text-xs mt-0.5">Personalized by Skilnex AI</p>
               </div>
-              <button onClick={handleRetake} className="flex items-center gap-1.5 text-xs text-slate-400 border border-slate-700 rounded-lg px-3 py-2 hover:border-slate-500 transition-colors">
-                <RotateCcw className="w-3.5 h-3.5" /> Retake
-              </button>
+              <div className="flex items-center gap-2">
+                <button onClick={handleShare}
+                  className="flex items-center gap-1.5 text-xs text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 rounded-lg px-3 py-2 hover:bg-emerald-500/20 transition-colors font-semibold">
+                  <Share2 className="w-3.5 h-3.5" /> Share
+                </button>
+                <button onClick={handleRetake} className="flex items-center gap-1.5 text-xs text-slate-400 border border-slate-700 rounded-lg px-3 py-2 hover:border-slate-500 transition-colors">
+                  <RotateCcw className="w-3.5 h-3.5" /> Retake
+                </button>
+              </div>
             </div>
 
             {/* Score ring */}
@@ -811,9 +743,15 @@ Respond ONLY with valid JSON (no markdown, no extra text):
         {phase.current === 4 && !result && (
           <div className="text-center py-16 space-y-4">
             <p className="text-slate-400">Kuch masla hua. Dobara try karo.</p>
-            <button onClick={handleRetake} className="bg-blue-600 text-white px-6 py-3 rounded-xl text-sm font-bold">
-              Retake Assessment
-            </button>
+            <div className="flex gap-3">
+              <button onClick={handleShare}
+                className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl text-sm font-bold transition-colors">
+                <Share2 className="w-4 h-4" /> Result Share Karo
+              </button>
+              <button onClick={handleRetake} className="flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-white px-4 py-3 rounded-xl text-sm font-bold transition-colors">
+                <RotateCcw className="w-4 h-4" /> Retake
+              </button>
+            </div>
           </div>
         )}
 
