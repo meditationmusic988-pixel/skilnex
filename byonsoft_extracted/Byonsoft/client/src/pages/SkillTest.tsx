@@ -175,19 +175,17 @@ export default function SkillTest() {
   const [goal, setGoal] = useState("");
   const [existingSkill, setExistingSkill] = useState("");
   const [device, setDevice] = useState("");
+  const [currentSituation, setCurrentSituation] = useState("");
+  const [incomeTarget, setIncomeTarget] = useState("");
+  const [timeAvailable, setTimeAvailable] = useState("");
+  const [biggestChallenge, setBiggestChallenge] = useState("");
   const [skills, setSkills] = useState<SkillRating[]>(INITIAL_SKILLS);
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
   const [meterVals, setMeterVals] = useState([0, 0, 0]);
   const [result, setResult] = useState<RoadmapResult | null>(null);
 
-  // ── Fetch actual app courses ──
-  const { data: courses = [] } = useQuery<Course[]>({
-    queryKey: ["/api/courses"],
-  });
-
-  const { data: skillScore, isLoading: loadingSkills } = useQuery<SkillScore | null>({
-    queryKey: ["/api/skills"],
-  });
+  const { data: courses = [] } = useQuery<Course[]>({ queryKey: ["/api/courses"] });
+  const { data: skillScore, isLoading: loadingSkills } = useQuery<SkillScore | null>({ queryKey: ["/api/skills"] });
 
   useEffect(() => {
     if (isNewTest) return;
@@ -227,7 +225,6 @@ export default function SkillTest() {
   };
 
   const callAI = async (msgInt?: ReturnType<typeof setInterval>) => {
-    // ── Build course list from actual app courses ──
     const courseList = courses.length > 0
       ? courses.map((c, i) => `${i + 1}. ${c.title} (${c.category})`).join("\n")
       : "No courses available";
@@ -240,6 +237,10 @@ ${courseList}
 User profile:
 - Goal: ${goal}
 - Background: ${existingSkill}
+- Current Situation: ${currentSituation}
+- Monthly Income Target: ${incomeTarget}
+- Time Available per Day: ${timeAvailable}
+- Biggest Challenge: ${biggestChallenge}
 - Device: ${device}
 - Skill ratings (0=None, 1=Basic, 2=Okay, 3=Good, 4=Expert): ${ratedSkillsSummary}
 - Overall skill score: ${avgSkillScore}/100
@@ -248,25 +249,25 @@ Instructions:
 1. Pick 3-4 courses from the list above that best match the user's goal and highest-rated skills.
 2. Use the EXACT course title from the list — do not modify or invent names.
 3. If no course matches perfectly, pick the closest ones.
-4. career_paths should match the user's goal (e.g. if goal is shop owner, suggest shop/business paths).
+4. career_paths should match the user's goal.
 5. learning_order should describe steps using skill names, NOT course names.
 
 Respond ONLY with valid JSON (no markdown, no extra text):
 {
   "skill_level": "Beginner|Intermediate|Advanced",
-  "skill_score": <Calculate 0-100 based on user skill ratings. If all skills are 0/Bilkul Nahi, give score between 5-20. Never return 0.>,
+  "skill_score": <Calculate 0-100 based on skill ratings. If all zero, give 5-20. Never return 0.>,
   "confidence_scores": {
-    "technical": <0-100, based on design/coding/video/photo skill ratings>,
-    "mindset": <0-100, based on sales/marketing/goal clarity>,
-    "market_awareness": <0-100, based on ecom/marketing/digital skills>
+    "technical": <0-100 based on design/coding/video/photo ratings>,
+    "mindset": <0-100 based on sales/marketing/goal clarity>,
+    "market_awareness": <0-100 based on ecom/marketing/digital skills>
   },
-  "strengths": ["strength based on high-rated skills", "another strength"],
-  "gaps": ["gap based on low-rated skills", "another gap"],
-  "recommended_courses": ["Exact Course Title From List Above", "Exact Course Title From List Above", "Exact Course Title From List Above"],
-  "career_paths": ["Path matching user goal", "Path 2", "Path 3"],
+  "strengths": ["strength 1", "strength 2"],
+  "gaps": ["gap 1", "gap 2"],
+  "recommended_courses": ["Exact Course Title", "Exact Course Title", "Exact Course Title"],
+  "career_paths": ["Path 1", "Path 2", "Path 3"],
   "expected_income": "PKR 40,000 – 120,000/month",
   "timeline": "3–6 months to first earning",
-  "learning_order": ["Step 1: learn this skill", "Step 2: practice this", "Step 3: apply here", "Step 4: grow by doing this"],
+  "learning_order": ["Step 1", "Step 2", "Step 3", "Step 4"],
   "motivation": "One powerful motivating sentence in Urdu or English"
 }`;
 
@@ -281,16 +282,35 @@ Respond ONLY with valid JSON (no markdown, no extra text):
       if (data.error) throw new Error(data.error);
       const parsed = typeof data === "string" ? JSON.parse(data) : data;
       if (msgInt) clearInterval(msgInt);
+
+      // Map AI course names to actual app course titles
+      if (Array.isArray(parsed.recommended_courses) && courses.length) {
+        const stop = new Set(["course","complete","learn","and","the","with","for","to","of","in","a","an","ka","ki","ke"]);
+        const kw = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g," ").split(" ").filter(w=>w.length>2&&!stop.has(w));
+        const used = new Set<number>();
+        parsed.recommended_courses = parsed.recommended_courses.map((aiName: string) => {
+          const aiWords = kw(aiName);
+          let best: Course|null = null, bestScore = 0;
+          for (const c of courses) {
+            if (used.has(c.id)) continue;
+            const cWords = kw(c.title);
+            const matched = aiWords.filter(aw=>cWords.some(cw=>cw.includes(aw)||aw.includes(cw))).length;
+            const sc = matched / Math.max(aiWords.length, 1);
+            if (sc > bestScore) { bestScore = sc; best = c; }
+          }
+          if (best && bestScore >= 0.25) { used.add(best.id); return best.title; }
+          return aiName;
+        });
+      }
+
       setResult(parsed);
       queryClient.invalidateQueries({ queryKey: ["/api/skills"] });
       goPhase(4);
     } catch {
       if (msgInt) clearInterval(msgInt);
-      // ── Fallback: use first 4 actual courses if available ──
       const fallbackCourses = courses.length > 0
         ? courses.slice(0, 4).map(c => c.title)
         : ["Digital Marketing Course", "Freelancing Basics", "E-Commerce Setup", "Content Creation"];
-
       const topSkills = [...skills].sort((a, b) => b.value - a.value).slice(0, 2).map(s => s.label);
       setResult({
         skill_level: avgSkillScore < 35 ? "Beginner" : avgSkillScore < 65 ? "Intermediate" : "Advanced",
@@ -344,6 +364,7 @@ https://skilnex-production-d029.up.railway.app/skill-test?new=1
 
   const handleRetake = () => {
     setGoal(""); setExistingSkill(""); setDevice("");
+    setCurrentSituation(""); setIncomeTarget(""); setTimeAvailable(""); setBiggestChallenge("");
     setSkills(INITIAL_SKILLS.map(s => ({ ...s, value: 0 })));
     setResult(null); setLoadingMsgIdx(0); setMeterVals([0, 0, 0]);
     goPhase(0);
@@ -438,7 +459,7 @@ https://skilnex-production-d029.up.railway.app/skill-test?new=1
           </div>
         )}
 
-        {/* PHASE 1: BACKGROUND */}
+        {/* PHASE 1: BACKGROUND — 7 Questions */}
         {phase.current === 1 && (
           <div className="space-y-4 animate-in fade-in duration-500">
             <div className="flex items-center gap-3 mb-6">
@@ -449,6 +470,7 @@ https://skilnex-production-d029.up.railway.app/skill-test?new=1
               <StepDot n={3} state="idle" />
             </div>
 
+            {/* Q1 */}
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Q1</span>
@@ -458,12 +480,13 @@ https://skilnex-production-d029.up.railway.app/skill-test?new=1
               <textarea
                 className="w-full bg-slate-800/60 border border-slate-700 rounded-xl text-white text-sm placeholder:text-slate-600 p-3 resize-none focus:outline-none focus:border-blue-500 transition-colors"
                 rows={3}
-                placeholder="e.g. Online earning seekhna hai, freelancing start karni hai..."
+                placeholder="e.g. Online earning seekhna hai, freelancing start karni hai, apna business grow karna hai..."
                 value={goal}
                 onChange={e => setGoal(e.target.value)}
               />
             </div>
 
+            {/* Q2 */}
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Q2</span>
@@ -473,15 +496,112 @@ https://skilnex-production-d029.up.railway.app/skill-test?new=1
               <textarea
                 className="w-full bg-slate-800/60 border border-slate-700 rounded-xl text-white text-sm placeholder:text-slate-600 p-3 resize-none focus:outline-none focus:border-blue-500 transition-colors"
                 rows={3}
-                placeholder="e.g. Student hoon, matriculation ki hai, koi job nahi..."
+                placeholder="e.g. Student hoon, matriculation ki hai, 2 saal ki job experience hai..."
                 value={existingSkill}
                 onChange={e => setExistingSkill(e.target.value)}
               />
             </div>
 
+            {/* Q3 */}
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Q3</span>
+                <span className="text-xs text-slate-600">Current Situation</span>
+              </div>
+              <p className="text-sm font-semibold text-white mb-3">Aap abhi kya kar rahe hain?</p>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: "🎓 Student", value: "Student" },
+                  { label: "💼 Job kar raha/rahi hoon", value: "Employed" },
+                  { label: "🏪 Business owner hoon", value: "Business Owner" },
+                  { label: "🔍 Berozgaar hoon", value: "Unemployed" },
+                  { label: "🏠 Ghar pe hoon", value: "Homemaker" },
+                  { label: "💻 Already freelancing", value: "Freelancer" },
+                ].map(({ label, value }) => (
+                  <button key={value} onClick={() => setCurrentSituation(value)}
+                    className={`p-3 rounded-xl border text-sm font-medium transition-all text-left
+                      ${currentSituation === value ? "bg-blue-600/20 border-blue-500 text-blue-300" : "bg-slate-800/40 border-slate-700 text-slate-400 hover:border-slate-600"}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Q4 */}
+            <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Q4</span>
+                <span className="text-xs text-slate-600">Income Target</span>
+              </div>
+              <p className="text-sm font-semibold text-white mb-3">Aap monthly kitna kamana chahte hain?</p>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: "Rs. 20,000 – 40,000", value: "PKR 20,000-40,000/month" },
+                  { label: "Rs. 40,000 – 80,000", value: "PKR 40,000-80,000/month" },
+                  { label: "Rs. 80,000 – 1,50,000", value: "PKR 80,000-150,000/month" },
+                  { label: "Rs. 1,50,000+", value: "PKR 150,000+/month" },
+                ].map(({ label, value }) => (
+                  <button key={value} onClick={() => setIncomeTarget(value)}
+                    className={`p-3 rounded-xl border text-sm font-medium transition-all
+                      ${incomeTarget === value ? "bg-emerald-600/20 border-emerald-500 text-emerald-300" : "bg-slate-800/40 border-slate-700 text-slate-400 hover:border-slate-600"}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Q5 */}
+            <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Q5</span>
+                <span className="text-xs text-slate-600">Time Available</span>
+              </div>
+              <p className="text-sm font-semibold text-white mb-3">Din mein kitne ghante de sakte hain learning ko?</p>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: "⏱ 1–2 ghante", value: "1-2 hours/day" },
+                  { label: "⏱ 3–4 ghante", value: "3-4 hours/day" },
+                  { label: "⏱ 5–6 ghante", value: "5-6 hours/day" },
+                  { label: "⏱ Full time (7+)", value: "7+ hours/day (full time)" },
+                ].map(({ label, value }) => (
+                  <button key={value} onClick={() => setTimeAvailable(value)}
+                    className={`p-3 rounded-xl border text-sm font-medium transition-all
+                      ${timeAvailable === value ? "bg-purple-600/20 border-purple-500 text-purple-300" : "bg-slate-800/40 border-slate-700 text-slate-400 hover:border-slate-600"}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Q6 */}
+            <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Q6</span>
+                <span className="text-xs text-slate-600">Biggest Challenge</span>
+              </div>
+              <p className="text-sm font-semibold text-white mb-3">Aapka sabse bada masla kya hai abhi?</p>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: "💸 Paise nahi hain", value: "No money to invest" },
+                  { label: "⏰ Time nahi milta", value: "Not enough time" },
+                  { label: "📚 Skills nahi hain", value: "Lack of skills" },
+                  { label: "🧭 Guidance nahi", value: "No proper guidance" },
+                  { label: "😟 Confidence nahi", value: "Lack of confidence" },
+                  { label: "🌐 Internet / Device", value: "Limited internet or device access" },
+                ].map(({ label, value }) => (
+                  <button key={value} onClick={() => setBiggestChallenge(value)}
+                    className={`p-3 rounded-xl border text-sm font-medium transition-all text-left
+                      ${biggestChallenge === value ? "bg-orange-600/20 border-orange-500 text-orange-300" : "bg-slate-800/40 border-slate-700 text-slate-400 hover:border-slate-600"}`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Q7 */}
+            <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs font-bold text-blue-400 uppercase tracking-widest">Q7</span>
                 <span className="text-xs text-slate-600">Device</span>
               </div>
               <p className="text-sm font-semibold text-white mb-3">Aapke paas kaunsa device hai?</p>
@@ -498,7 +618,7 @@ https://skilnex-production-d029.up.railway.app/skill-test?new=1
 
             <button
               onClick={() => goPhase(2)}
-              disabled={goal.trim().length < 5 || existingSkill.trim().length < 3 || !device}
+              disabled={goal.trim().length < 5 || existingSkill.trim().length < 3 || !device || !currentSituation || !incomeTarget || !timeAvailable || !biggestChallenge}
               className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-colors text-sm">
               Skills Rate Karo <ArrowRight className="w-4 h-4" />
             </button>
@@ -692,7 +812,7 @@ https://skilnex-production-d029.up.railway.app/skill-test?new=1
               </div>
             </div>
 
-            {/* Recommended courses — actual app courses */}
+            {/* Recommended courses */}
             <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
                 <BookOpen className="w-3.5 h-3.5" /> Recommended Courses
@@ -728,7 +848,12 @@ https://skilnex-production-d029.up.railway.app/skill-test?new=1
               </div>
             </div>
 
-            {/* CTA */}
+            {/* Share + Dashboard CTA */}
+            <button onClick={handleShare}
+              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-3.5 rounded-xl text-sm transition-all">
+              <Share2 className="w-4 h-4" /> Apna Result Share Karo — Doston Ko Inspire Karo!
+            </button>
+
             <div className="bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl p-5 text-center">
               <p className="text-white font-bold mb-1">Ready to start? 🚀</p>
               <p className="text-blue-200 text-xs mb-4">Apne courses explore karo aur pehla qadam uthao!</p>
@@ -743,15 +868,9 @@ https://skilnex-production-d029.up.railway.app/skill-test?new=1
         {phase.current === 4 && !result && (
           <div className="text-center py-16 space-y-4">
             <p className="text-slate-400">Kuch masla hua. Dobara try karo.</p>
-            <div className="flex gap-3">
-              <button onClick={handleShare}
-                className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-3 rounded-xl text-sm font-bold transition-colors">
-                <Share2 className="w-4 h-4" /> Result Share Karo
-              </button>
-              <button onClick={handleRetake} className="flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-white px-4 py-3 rounded-xl text-sm font-bold transition-colors">
-                <RotateCcw className="w-4 h-4" /> Retake
-              </button>
-            </div>
+            <button onClick={handleRetake} className="bg-slate-700 hover:bg-slate-600 text-white px-6 py-3 rounded-xl text-sm font-bold transition-colors">
+              <RotateCcw className="w-4 h-4 inline mr-2" /> Retake
+            </button>
           </div>
         )}
 
