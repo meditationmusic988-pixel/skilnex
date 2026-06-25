@@ -228,3 +228,132 @@ export function generateSquareCardSVG(opts: {
   <text x="${S / 2}" y="1052" text-anchor="middle" font-family="system-ui,sans-serif" font-size="16" fill="#3B82F6" font-weight="600">${safeShareUrl}</text>
 </svg>`;
 }
+
+// ── Skill Test Result Card (1080×1080) ─────────────────────────────────────
+export function generateSkillResultCardSVG(opts: {
+  skill_level: string;
+  skill_score: number;
+  career_paths: string[];
+  expected_income: string;
+  timeline: string;
+  technical: number;
+  mindset: number;
+  market_awareness: number;
+  share_url: string;
+}): string {
+  const { skill_level, skill_score, career_paths, expected_income, timeline, technical, mindset, market_awareness, share_url } = opts;
+  const S = 1080;
+
+  const scoreColor = skill_score < 40 ? "#EF4444" : skill_score < 65 ? "#F59E0B" : "#22C55E";
+  const levelColor = skill_level === "Beginner" ? "#F59E0B" : skill_level === "Advanced" ? "#22C55E" : "#3B82F6";
+  const safeLevel = escapeXml(skill_level);
+  const safeIncome = escapeXml(expected_income);
+  const safeTimeline = escapeXml(timeline);
+  const safeUrl = escapeXml(share_url.replace(/^https?:\/\//, ""));
+
+  const path1 = escapeXml(career_paths[0] ?? "");
+  const path2 = escapeXml(career_paths[1] ?? "");
+  const path3 = escapeXml(career_paths[2] ?? "");
+
+  // Score ring calculations
+  const r = 130, cx = S / 2, cy = 380;
+  const circ = 2 * Math.PI * r;
+  const dash = ((100 - skill_score) / 100) * circ;
+
+  // Bar widths
+  const techW = Math.round((technical / 100) * 700);
+  const mindW = Math.round((mindset / 100) * 700);
+  const mktW  = Math.round((market_awareness / 100) * 700);
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${S} ${S}" width="${S}" height="${S}">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.5" y2="1" gradientUnits="objectBoundingBox">
+      <stop offset="0%" stop-color="#06101D"/>
+      <stop offset="100%" stop-color="#0E1B32"/>
+    </linearGradient>
+    <linearGradient id="topbar" x1="0" y1="0" x2="1" y2="0" gradientUnits="objectBoundingBox">
+      <stop offset="0%" stop-color="#2563EB"/>
+      <stop offset="50%" stop-color="#06B6D4"/>
+      <stop offset="100%" stop-color="#7C3AED"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="${S}" height="${S}" fill="url(#bg)"/>
+  <rect width="${S}" height="5" fill="url(#topbar)"/>
+
+  <!-- Grid dots -->
+  ${Array.from({ length: 11 }, (_, row) =>
+    Array.from({ length: 11 }, (_, col) =>
+      `<circle cx="${col * 108 + 30}" cy="${row * 108 + 30}" r="1.5" fill="#fff" opacity="0.03"/>`
+    ).join("")
+  ).join("")}
+
+  <!-- Logo -->
+  <rect x="60" y="28" width="44" height="44" rx="10" fill="#2563EB"/>
+  <text x="82" y="58" text-anchor="middle" font-family="system-ui,sans-serif" font-size="22" font-weight="900" fill="white">S</text>
+  <text x="116" y="47" font-family="system-ui,sans-serif" font-size="20" font-weight="800" fill="white">Skilnex</text>
+  <text x="116" y="66" font-family="system-ui,sans-serif" font-size="11" fill="#475569" letter-spacing="3">AI SKILL ASSESSMENT</text>
+
+  <!-- Badge -->
+  <rect x="${S - 250}" y="30" width="190" height="34" rx="17" fill="#0F2240" stroke="#2563EB" stroke-width="1.2" stroke-opacity="0.5"/>
+  <circle cx="${S - 230}" cy="47" r="5" fill="#34D399"/>
+  <text x="${S - 218}" y="52" font-family="system-ui,sans-serif" font-size="12" fill="#94A3B8">Result Ready</text>
+
+  <!-- Divider -->
+  <line x1="60" y1="92" x2="${S - 60}" y2="92" stroke="#1E293B" stroke-width="1.2"/>
+
+  <!-- Score Ring -->
+  <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#1E293B" stroke-width="14"/>
+  <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${scoreColor}" stroke-width="14"
+    stroke-linecap="round"
+    stroke-dasharray="${circ}"
+    stroke-dashoffset="${dash}"
+    transform="rotate(-90 ${cx} ${cy})"/>
+  <text x="${cx}" y="${cy - 18}" text-anchor="middle" font-family="system-ui,sans-serif" font-size="72" font-weight="900" fill="white">${skill_score}</text>
+  <text x="${cx}" y="${cy + 20}" text-anchor="middle" font-family="system-ui,sans-serif" font-size="22" fill="#475569">/ 100</text>
+  <rect x="${cx - 80}" y="${cy + 44}" width="160" height="36" rx="18" fill="${levelColor}22" stroke="${levelColor}" stroke-width="1.5" stroke-opacity="0.5"/>
+  <text x="${cx}" y="${cy + 68}" text-anchor="middle" font-family="system-ui,sans-serif" font-size="16" font-weight="700" fill="${levelColor}">${safeLevel}</text>
+
+  <!-- Skill Breakdown bars -->
+  <text x="60" y="570" font-family="system-ui,sans-serif" font-size="13" fill="#475569" font-weight="700" letter-spacing="2">SKILL BREAKDOWN</text>
+
+  <text x="60" y="605" font-family="system-ui,sans-serif" font-size="14" fill="#94A3B8">Technical</text>
+  <rect x="60" y="613" width="700" height="12" rx="6" fill="#1E293B"/>
+  <rect x="60" y="613" width="${techW}" height="12" rx="6" fill="#3B82F6"/>
+  <text x="775" y="624" font-family="system-ui,sans-serif" font-size="14" fill="#3B82F6" font-weight="700">${technical}%</text>
+
+  <text x="60" y="653" font-family="system-ui,sans-serif" font-size="14" fill="#94A3B8">Career Mindset</text>
+  <rect x="60" y="661" width="700" height="12" rx="6" fill="#1E293B"/>
+  <rect x="60" y="661" width="${mindW}" height="12" rx="6" fill="#22C55E"/>
+  <text x="775" y="672" font-family="system-ui,sans-serif" font-size="14" fill="#22C55E" font-weight="700">${mindset}%</text>
+
+  <text x="60" y="701" font-family="system-ui,sans-serif" font-size="14" fill="#94A3B8">Market Awareness</text>
+  <rect x="60" y="709" width="700" height="12" rx="6" fill="#1E293B"/>
+  <rect x="60" y="709" width="${mktW}" height="12" rx="6" fill="#F59E0B"/>
+  <text x="775" y="720" font-family="system-ui,sans-serif" font-size="14" fill="#F59E0B" font-weight="700">${market_awareness}%</text>
+
+  <!-- Career Paths -->
+  <line x1="60" y1="750" x2="${S - 60}" y2="750" stroke="#1E293B" stroke-width="1"/>
+  <text x="60" y="785" font-family="system-ui,sans-serif" font-size="13" fill="#475569" font-weight="700" letter-spacing="2">CAREER PATHS</text>
+  ${path1 ? `<rect x="60" y="798" width="${Math.min(path1.length * 13 + 40, 300)}" height="36" rx="18" fill="#1E3A5F" stroke="#3B82F6" stroke-width="1.2" stroke-opacity="0.5"/>
+  <text x="80" y="822" font-family="system-ui,sans-serif" font-size="15" font-weight="600" fill="#60A5FA">${path1}</text>` : ""}
+  ${path2 ? `<rect x="380" y="798" width="${Math.min(path2.length * 13 + 40, 300)}" height="36" rx="18" fill="#1E3A5F" stroke="#3B82F6" stroke-width="1.2" stroke-opacity="0.5"/>
+  <text x="400" y="822" font-family="system-ui,sans-serif" font-size="15" font-weight="600" fill="#60A5FA">${path2}</text>` : ""}
+  ${path3 ? `<rect x="700" y="798" width="${Math.min(path3.length * 13 + 40, 300)}" height="36" rx="18" fill="#1E3A5F" stroke="#3B82F6" stroke-width="1.2" stroke-opacity="0.5"/>
+  <text x="720" y="822" font-family="system-ui,sans-serif" font-size="15" font-weight="600" fill="#60A5FA">${path3}</text>` : ""}
+
+  <!-- Income -->
+  <rect x="60" y="858" width="480" height="100" rx="14" fill="#052213" stroke="#22C55E" stroke-width="1.5" stroke-opacity="0.4"/>
+  <text x="90" y="893" font-family="system-ui,sans-serif" font-size="12" fill="#22C55E" font-weight="700" letter-spacing="2">EXPECTED INCOME</text>
+  <text x="90" y="933" font-family="system-ui,sans-serif" font-size="24" font-weight="900" fill="white">${safeIncome}</text>
+
+  <rect x="560" y="858" width="460" height="100" rx="14" fill="#1A1203" stroke="#EAB308" stroke-width="1.5" stroke-opacity="0.4"/>
+  <text x="590" y="893" font-family="system-ui,sans-serif" font-size="12" fill="#EAB308" font-weight="700" letter-spacing="2">TIMELINE</text>
+  <text x="590" y="933" font-family="system-ui,sans-serif" font-size="20" font-weight="700" fill="white">${safeTimeline}</text>
+
+  <!-- Bottom CTA -->
+  <line x1="60" y1="988" x2="${S - 60}" y2="988" stroke="#1E293B" stroke-width="1"/>
+  <text x="${S / 2}" y="1022" text-anchor="middle" font-family="system-ui,sans-serif" font-size="15" fill="#475569">Apna free AI Career Assessment lo →</text>
+  <text x="${S / 2}" y="1050" text-anchor="middle" font-family="system-ui,sans-serif" font-size="15" fill="#3B82F6" font-weight="600">${safeUrl}</text>
+</svg>`;
+}
