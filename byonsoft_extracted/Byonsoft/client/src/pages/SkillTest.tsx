@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import {
-  ArrowLeft, ArrowRight, Zap, RotateCcw, BookOpen, Share2,
+  ArrowLeft, ArrowRight, Zap, RotateCcw, BookOpen, Share2, Download,
   Briefcase, DollarSign, ListOrdered, CheckCircle2,
   Smartphone, Laptop, Monitor, Layers,
   TrendingUp, Target, Award, Star, ChevronRight,
@@ -337,6 +337,26 @@ Respond ONLY with valid JSON (no markdown, no extra text):
         motivation: "Aap ke paas skills hain — bas inhe duniya ko dikhane ka waqt aa gaya hai!",
       });
       goPhase(4);
+    }
+  };
+
+  const handleDownloadImage = async () => {
+    try {
+      const token = localStorage.getItem("byonsoft_token");
+      const res = await fetch("/api/skill-result-image", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed");
+      const svg = await res.text();
+      const blob = new Blob([svg], { type: "image/svg+xml" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "skilnex-career-result.svg";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("Image download failed. Please try again.");
     }
   };
 
@@ -714,6 +734,10 @@ https://skilnex-production-d029.up.railway.app/skill-test?new=1
                 <p className="text-slate-500 text-xs mt-0.5">Personalized by Skilnex AI</p>
               </div>
               <div className="flex items-center gap-2">
+                <button onClick={handleDownloadImage}
+                  className="flex items-center gap-1.5 text-xs text-blue-400 border border-blue-500/30 bg-blue-500/10 rounded-lg px-3 py-2 hover:bg-blue-500/20 transition-colors font-semibold">
+                  <Download className="w-3.5 h-3.5" /> Image
+                </button>
                 <button onClick={handleShare}
                   className="flex items-center gap-1.5 text-xs text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 rounded-lg px-3 py-2 hover:bg-emerald-500/20 transition-colors font-semibold">
                   <Share2 className="w-3.5 h-3.5" /> Share
