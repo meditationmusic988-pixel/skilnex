@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import { generateResultCardSVG, generateSquareCardSVG } from "./imageGenerator";
+import { generateResultCardSVG, generateSquareCardSVG, generateSkillResultCardSVG } from "./imageGenerator";
 import { groqChat, BYONSOFT_SYSTEM_PROMPT, BYONSOFT_JSON_SYSTEM_PROMPT, CAREER_MAPPING_PROMPT } from "./groq";
 
 const JWT_SECRET = process.env.SESSION_SECRET || "byonsoft_secret_2024";
@@ -267,17 +267,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       try {
         const parsed = JSON.parse(cleaned.slice(jsonStart, jsonEnd + 1));
         const result = {
-          skill_level:         typeof parsed.skill_level === "string" ? parsed.skill_level : "Beginner",
-          skill_score:         typeof parsed.skill_score === "number" ? parsed.skill_score : 0,
-          confidence_scores:   parsed.confidence_scores && typeof parsed.confidence_scores === "object" ? parsed.confidence_scores : { technical: 50, mindset: 50, market_awareness: 50 },
-          strengths:           Array.isArray(parsed.strengths) ? parsed.strengths : [],
-          gaps:                Array.isArray(parsed.gaps) ? parsed.gaps : [],
           recommended_courses: Array.isArray(parsed.recommended_courses) ? parsed.recommended_courses : [],
-          career_paths:        Array.isArray(parsed.career_paths) ? parsed.career_paths : [],
-          expected_income:     typeof parsed.expected_income === "string" ? parsed.expected_income : "",
-          timeline:            typeof parsed.timeline === "string" ? parsed.timeline : "",
-          learning_order:      Array.isArray(parsed.learning_order) ? parsed.learning_order : (typeof parsed.learning_order === "string" ? [parsed.learning_order] : []),
-          motivation:          typeof parsed.motivation === "string" ? parsed.motivation : "",
+          career_paths: Array.isArray(parsed.career_paths) ? parsed.career_paths : [],
+          expected_income: typeof parsed.expected_income === "string" ? parsed.expected_income : "",
+          learning_order: typeof parsed.learning_order === "string" ? parsed.learning_order : "",
         };
         await storage.upsertSkillScore({
           user_id: req.user!.id,
@@ -938,6 +931,42 @@ Output ONLY this JSON (no markdown):
       res.setHeader("Content-Type", "text/csv");
       res.setHeader("Content-Disposition", "attachment; filename=referrals.csv");
       return res.send(csv);
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+
+  // ── SKILL TEST RESULT IMAGE ────────────────────────────────────────────────
+  app.get("/api/skill-result-image", authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const skill = await storage.getSkillScore(req.user!.id);
+      if (!skill?.roadmap_result) return res.status(404).json({ error: "No result found" });
+
+      let parsed: any = {};
+      try {
+        parsed = JSON.parse(skill.roadmap_result);
+        if (typeof parsed === "string") parsed = JSON.parse(parsed);
+      } catch {
+        return res.status(500).json({ error: "Parse error" });
+      }
+
+      const origin = `${req.protocol}://${req.get("host")}`;
+      const svg = generateSkillResultCardSVG({
+        skill_level:       parsed.skill_level       ?? "Beginner",
+        skill_score:       parsed.skill_score        ?? 0,
+        career_paths:      Array.isArray(parsed.career_paths) ? parsed.career_paths : [],
+        expected_income:   parsed.expected_income    ?? "",
+        timeline:          parsed.timeline           ?? "",
+        technical:         parsed.confidence_scores?.technical        ?? 50,
+        mindset:           parsed.confidence_scores?.mindset          ?? 50,
+        market_awareness:  parsed.confidence_scores?.market_awareness ?? 50,
+        share_url:         `${origin}/skill-test`,
+      });
+
+      res.setHeader("Content-Type", "image/svg+xml");
+      res.setHeader("Cache-Control", "no-cache");
+      return res.send(svg);
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }
