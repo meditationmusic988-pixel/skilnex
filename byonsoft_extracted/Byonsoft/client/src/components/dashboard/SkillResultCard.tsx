@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import {
   RotateCcw, TrendingUp, Award, Star, CheckCircle2,
   Target, ChevronRight, Briefcase, DollarSign,
-  BookOpen, ListOrdered, Share2
+  BookOpen, ListOrdered, Share2, Download
 } from "lucide-react";
 
 interface RoadmapResult {
@@ -25,7 +25,6 @@ interface SkillResultCardProps {
   onRetake: () => void;
 }
 
-// ── Exact same as SkillTest ──
 function AnimatedNumber({ target }: { target: number }) {
   const [val, setVal] = useState(0);
   useEffect(() => {
@@ -92,7 +91,38 @@ export function SkillResultCard({ skillScore, onRetake }: SkillResultCardProps) 
 
   if (!skillScore?.roadmap_result) return null;
 
-  const handleShare = (r: RoadmapResult) => {
+  let result: RoadmapResult | null = null;
+  try {
+    let parsed = JSON.parse(skillScore.roadmap_result);
+    if (typeof parsed === "string") parsed = JSON.parse(parsed);
+    if (parsed?.skill_score) result = parsed;
+  } catch { return null; }
+
+  if (!result) return null;
+
+  const r = result; // non-null alias for callbacks
+
+  const handleDownloadImage = async () => {
+    try {
+      const token = localStorage.getItem("byonsoft_token");
+      const res = await fetch("/api/skill-result-image", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error("Failed");
+      const svg = await res.text();
+      const blob = new Blob([svg], { type: "image/svg+xml" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "skilnex-career-result.svg";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("Image download failed. Please try again.");
+    }
+  };
+
+  const handleShare = () => {
     const text = `🚀 Maine Skilnex AI Career Assessment complete ki!
 
 📊 Mera Skill Score: ${r.skill_score}/100 (${r.skill_level})
@@ -113,26 +143,23 @@ https://skilnex-production-d029.up.railway.app/skill-test?new=1
     }
   };
 
-  let result: RoadmapResult | null = null;
-  try {
-    let parsed = JSON.parse(skillScore.roadmap_result);
-    if (typeof parsed === "string") parsed = JSON.parse(parsed); // double-stringify safe
-    if (parsed?.skill_score) result = parsed;
-  } catch { return null; }
-
-  if (!result) return null;
-
   const STEP_COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#a855f7"];
 
   return (
     <div className="space-y-4 animate-in fade-in duration-500">
+
+      {/* Header */}
       <div className="flex items-center justify-between mb-2">
         <div>
           <h2 className="text-xl font-black text-white">Aapka Career Report</h2>
           <p className="text-slate-500 text-xs mt-0.5">Personalized by Skilnex AI</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => handleShare(result)}
+          <button onClick={handleDownloadImage}
+            className="flex items-center gap-1.5 text-xs text-blue-400 border border-blue-500/30 bg-blue-500/10 rounded-lg px-3 py-2 hover:bg-blue-500/20 transition-colors font-semibold">
+            <Download className="w-3.5 h-3.5" /> Image
+          </button>
+          <button onClick={handleShare}
             className="flex items-center gap-1.5 text-xs text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 rounded-lg px-3 py-2 hover:bg-emerald-500/20 transition-colors font-semibold">
             <Share2 className="w-3.5 h-3.5" /> Share
           </button>
@@ -145,12 +172,12 @@ https://skilnex-production-d029.up.railway.app/skill-test?new=1
 
       {/* Score ring */}
       <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 flex items-center gap-5">
-        <ScoreRing score={result.skill_score ?? 0} color={scoreColor(result.skill_score ?? 0)} />
+        <ScoreRing score={r.skill_score ?? 0} color={scoreColor(r.skill_score ?? 0)} />
         <div className="flex-1 min-w-0">
-          <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full border mb-2 ${levelColor(result.skill_level ?? "")}`}>
-            <Award className="w-3 h-3" /> {result.skill_level}
+          <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full border mb-2 ${levelColor(r.skill_level ?? "")}`}>
+            <Award className="w-3 h-3" /> {r.skill_level}
           </span>
-          <p className="text-sm text-slate-300 italic leading-relaxed">"{result.motivation}"</p>
+          <p className="text-sm text-slate-300 italic leading-relaxed">"{r.motivation}"</p>
         </div>
       </div>
 
@@ -159,9 +186,9 @@ https://skilnex-production-d029.up.railway.app/skill-test?new=1
         <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
           <TrendingUp className="w-3.5 h-3.5" /> Skill Breakdown
         </p>
-        <ResultBar label="Technical Skills"  value={result.confidence_scores?.technical        ?? 50} color="#3b82f6" />
-        <ResultBar label="Career Mindset"    value={result.confidence_scores?.mindset          ?? 50} color="#22c55e" />
-        <ResultBar label="Market Awareness"  value={result.confidence_scores?.market_awareness ?? 50} color="#f59e0b" />
+        <ResultBar label="Technical Skills"  value={r.confidence_scores?.technical        ?? 50} color="#3b82f6" />
+        <ResultBar label="Career Mindset"    value={r.confidence_scores?.mindset          ?? 50} color="#22c55e" />
+        <ResultBar label="Market Awareness"  value={r.confidence_scores?.market_awareness ?? 50} color="#f59e0b" />
       </div>
 
       {/* Strengths + Gaps */}
@@ -171,7 +198,7 @@ https://skilnex-production-d029.up.railway.app/skill-test?new=1
             <Star className="w-3 h-3" /> Strengths
           </p>
           <div className="space-y-2">
-            {(result.strengths ?? []).map((s, i) => (
+            {(r.strengths ?? []).map((s, i) => (
               <p key={i} className="text-xs text-green-200/80 flex items-start gap-1.5">
                 <CheckCircle2 className="w-3 h-3 shrink-0 mt-0.5 text-green-400" /> {s}
               </p>
@@ -183,7 +210,7 @@ https://skilnex-production-d029.up.railway.app/skill-test?new=1
             <Target className="w-3 h-3" /> Improve Karo
           </p>
           <div className="space-y-2">
-            {(result.gaps ?? []).map((g, i) => (
+            {(r.gaps ?? []).map((g, i) => (
               <p key={i} className="text-xs text-amber-200/80 flex items-start gap-1.5">
                 <ChevronRight className="w-3 h-3 shrink-0 mt-0.5 text-amber-400" /> {g}
               </p>
@@ -198,14 +225,14 @@ https://skilnex-production-d029.up.railway.app/skill-test?new=1
           <Briefcase className="w-3.5 h-3.5" /> Career Paths
         </p>
         <div className="flex flex-wrap gap-2 mb-4">
-          {(result.career_paths ?? []).map((p, i) => (
+          {(r.career_paths ?? []).map((p, i) => (
             <span key={i} className="bg-blue-600/20 border border-blue-500/30 text-blue-300 text-xs font-medium px-3 py-1.5 rounded-full">{p}</span>
           ))}
         </div>
         <div className="bg-blue-600/10 border border-blue-500/20 rounded-xl p-4">
           <p className="text-xs text-slate-500 mb-1 flex items-center gap-1.5"><DollarSign className="w-3 h-3" /> Expected Income</p>
-          <p className="text-xl font-black text-white">{result.expected_income}</p>
-          <p className="text-xs text-blue-400 mt-1">{result.timeline}</p>
+          <p className="text-xl font-black text-white">{r.expected_income}</p>
+          <p className="text-xs text-blue-400 mt-1">{r.timeline}</p>
         </div>
       </div>
 
@@ -215,7 +242,7 @@ https://skilnex-production-d029.up.railway.app/skill-test?new=1
           <BookOpen className="w-3.5 h-3.5" /> Recommended Courses
         </p>
         <div className="space-y-2.5">
-          {(result.recommended_courses ?? []).map((course, i) => (
+          {(r.recommended_courses ?? []).map((course, i) => (
             <div key={i} className="flex items-start gap-3 p-3 bg-slate-800/40 border border-slate-700/50 rounded-xl">
               <span className="w-6 h-6 rounded-full bg-blue-600/30 text-blue-300 text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
               <p className="text-sm text-white font-medium leading-snug">{course}</p>
@@ -230,7 +257,7 @@ https://skilnex-production-d029.up.railway.app/skill-test?new=1
           <ListOrdered className="w-3.5 h-3.5" /> Learning Order
         </p>
         <div className="space-y-3">
-          {(Array.isArray(result.learning_order) ? result.learning_order : [result.learning_order]).filter(Boolean).map((step, i) => (
+          {(Array.isArray(r.learning_order) ? r.learning_order : [r.learning_order]).filter(Boolean).map((step, i) => (
             <div key={i} className="flex items-start gap-3">
               <div className="w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5"
                 style={{ borderColor: STEP_COLORS[i % STEP_COLORS.length], color: STEP_COLORS[i % STEP_COLORS.length] }}>
@@ -241,12 +268,13 @@ https://skilnex-production-d029.up.railway.app/skill-test?new=1
           ))}
         </div>
       </div>
-    </div>
-      {/* Share CTA at bottom */}
-      <button onClick={() => handleShare(result)}
+
+      {/* Share CTA bottom */}
+      <button onClick={handleShare}
         className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold py-3.5 rounded-xl text-sm transition-all">
         <Share2 className="w-4 h-4" /> Apna Result Share Karo — Doston Ko Inspire Karo!
       </button>
+
     </div>
   );
 }
