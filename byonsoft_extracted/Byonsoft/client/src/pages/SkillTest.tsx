@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import {
-  ArrowLeft, ArrowRight, Zap, RotateCcw, BookOpen, Share2, Download,
+  ArrowLeft, ArrowRight, Zap, RotateCcw, BookOpen, Share2,
   Briefcase, DollarSign, ListOrdered, CheckCircle2,
   Smartphone, Laptop, Monitor, Layers,
   TrendingUp, Target, Award, Star, ChevronRight,
@@ -340,45 +340,62 @@ Respond ONLY with valid JSON (no markdown, no extra text):
     }
   };
 
-  const handleDownloadImage = async () => {
+  const handleShare = async () => {
+    if (!result) return;
+    const token = localStorage.getItem("byonsoft_token");
     try {
-      const token = localStorage.getItem("byonsoft_token");
+      // 1. SVG fetch karo server se
       const res = await fetch("/api/skill-result-image", {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error("Failed");
-      const svg = await res.text();
-      const blob = new Blob([svg], { type: "image/svg+xml" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "skilnex-career-result.svg";
-      a.click();
-      URL.revokeObjectURL(url);
+      if (!res.ok) throw new Error("fetch failed");
+      const svgText = await res.text();
+
+      // 2. SVG → PNG via canvas
+      const svgBlob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
+      const svgUrl = URL.createObjectURL(svgBlob);
+      const img = new Image();
+      img.onload = async () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 1080; canvas.height = 1080;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(img, 0, 0, 1080, 1080);
+        URL.revokeObjectURL(svgUrl);
+        canvas.toBlob(async (blob) => {
+          if (!blob) return;
+          const file = new File([blob], "skilnex-result.png", { type: "image/png" });
+          if (navigator.canShare?.({ files: [file] })) {
+            await navigator.share({
+              title: "Mera Skilnex Career Result",
+              text: `🚀 Mera Skill Score: ${result!.skill_score}/100 (${result!.skill_level})\n💰 ${result!.expected_income}\n\nAap bhi try karo: https://skilnex-production-d029.up.railway.app/skill-test?new=1`,
+              files: [file],
+            });
+          } else if (navigator.share) {
+            // Image share nahi hoti to link share karo
+            await navigator.share({
+              title: "Mera Skilnex Career Result",
+              text: `🚀 Mera Skill Score: ${result!.skill_score}/100 (${result!.skill_level})\n💰 ${result!.expected_income}\n\nAap bhi try karo: https://skilnex-production-d029.up.railway.app/skill-test?new=1`,
+            });
+          } else {
+            // Desktop: PNG download
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url; a.download = "skilnex-result.png"; a.click();
+            URL.revokeObjectURL(url);
+          }
+        }, "image/png");
+      };
+      img.onerror = () => {
+        // Fallback: text share
+        navigator.clipboard?.writeText(`🚀 Mera Skill Score: ${result!.skill_score}/100 | ${result!.expected_income} | skilnex-production-d029.up.railway.app`);
+        alert("Result text copy ho gaya!");
+      };
+      img.src = svgUrl;
     } catch {
-      alert("Image download failed. Please try again.");
-    }
-  };
-
-  const handleShare = () => {
-    if (!result) return;
-    const text = `🚀 Maine Skilnex AI Career Assessment complete ki!
-
-📊 Mera Skill Score: ${result.skill_score}/100 (${result.skill_level})
-💼 Career Paths: ${(result.career_paths ?? []).slice(0, 2).join(", ")}
-💰 Expected Income: ${result.expected_income}
-
-AI ne mujhe bataya ke main ${result.timeline} mein earn karna shuru kar sakta/sakti hoon!
-
-Aap bhi apna free AI Career Assessment lo 👇
-https://skilnex-production-d029.up.railway.app/skill-test?new=1
-
-#Skilnex #Pakistan #OnlineEarning #CareerAssessment`;
-
-    if (navigator.share) {
-      navigator.share({ title: "Mera Skilnex Career Report", text });
-    } else {
-      navigator.clipboard.writeText(text).then(() => alert("Result copy ho gaya! Paste karke share karo."));
+      // Final fallback: text only
+      if (navigator.share) {
+        navigator.share({ title: "Mera Skilnex Career Result", text: `🚀 Mera Skill Score: ${result.skill_score}/100 (${result.skill_level}) | ${result.expected_income} | https://skilnex-production-d029.up.railway.app/skill-test?new=1` });
+      }
     }
   };
 
@@ -734,11 +751,7 @@ https://skilnex-production-d029.up.railway.app/skill-test?new=1
                 <p className="text-slate-500 text-xs mt-0.5">Personalized by Skilnex AI</p>
               </div>
               <div className="flex items-center gap-2">
-                <button onClick={handleDownloadImage}
-                  className="flex items-center gap-1.5 text-xs text-blue-400 border border-blue-500/30 bg-blue-500/10 rounded-lg px-3 py-2 hover:bg-blue-500/20 transition-colors font-semibold">
-                  <Download className="w-3.5 h-3.5" /> Image
-                </button>
-                <button onClick={handleShare}
+<button onClick={handleShare}
                   className="flex items-center gap-1.5 text-xs text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 rounded-lg px-3 py-2 hover:bg-emerald-500/20 transition-colors font-semibold">
                   <Share2 className="w-3.5 h-3.5" /> Share
                 </button>
