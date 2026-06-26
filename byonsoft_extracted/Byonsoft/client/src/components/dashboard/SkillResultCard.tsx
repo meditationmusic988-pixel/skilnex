@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import {
   RotateCcw, TrendingUp, Award, Star, CheckCircle2,
   Target, ChevronRight, Briefcase, DollarSign,
-  BookOpen, ListOrdered, Share2, Download
+  BookOpen, ListOrdered, Share2
 } from "lucide-react";
 
 interface RoadmapResult {
@@ -102,44 +102,49 @@ export function SkillResultCard({ skillScore, onRetake }: SkillResultCardProps) 
 
   const r = result; // non-null alias for callbacks
 
-  const handleDownloadImage = async () => {
+  const handleShare = async () => {
     try {
       const token = localStorage.getItem("byonsoft_token");
       const res = await fetch("/api/skill-result-image", {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error("Failed");
-      const svg = await res.text();
-      const blob = new Blob([svg], { type: "image/svg+xml" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "skilnex-career-result.svg";
-      a.click();
-      URL.revokeObjectURL(url);
+      if (!res.ok) throw new Error("Server error");
+      const svgText = await res.text();
+      // Convert SVG to PNG using canvas
+      const img = new Image();
+      const svgBlob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
+      const svgUrl = URL.createObjectURL(svgBlob);
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = 1080;
+        canvas.height = 1080;
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(img, 0, 0, 1080, 1080);
+        URL.revokeObjectURL(svgUrl);
+        canvas.toBlob((blob) => {
+          if (!blob) return;
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "skilnex-result.png";
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, "image/png");
+      };
+      img.onerror = () => {
+        // Fallback: download SVG directly
+        const a = document.createElement("a");
+        a.href = svgUrl;
+        a.download = "skilnex-result.svg";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      };
+      img.src = svgUrl;
     } catch {
-      alert("Image download failed. Please try again.");
-    }
-  };
-
-  const handleShare = () => {
-    const text = `🚀 Maine Skilnex AI Career Assessment complete ki!
-
-📊 Mera Skill Score: ${r.skill_score}/100 (${r.skill_level})
-💼 Career Paths: ${(r.career_paths ?? []).slice(0, 2).join(", ")}
-💰 Expected Income: ${r.expected_income}
-⏱ Timeline: ${r.timeline}
-
-AI ne mujhe mera personalized career roadmap diya!
-Aap bhi try karo 👇
-https://skilnex-production-d029.up.railway.app/skill-test?new=1
-
-#Skilnex #Pakistan #OnlineEarning`;
-
-    if (navigator.share) {
-      navigator.share({ title: "Mera Skilnex Career Report", text });
-    } else {
-      navigator.clipboard.writeText(text).then(() => alert("Result copy ho gaya! Paste karke share karo."));
+      alert("Image generate nahi ho saki. Dobara try karein.");
     }
   };
 
@@ -155,11 +160,7 @@ https://skilnex-production-d029.up.railway.app/skill-test?new=1
           <p className="text-slate-500 text-xs mt-0.5">Personalized by Skilnex AI</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={handleDownloadImage}
-            className="flex items-center gap-1.5 text-xs text-blue-400 border border-blue-500/30 bg-blue-500/10 rounded-lg px-3 py-2 hover:bg-blue-500/20 transition-colors font-semibold">
-            <Download className="w-3.5 h-3.5" /> Image
-          </button>
-          <button onClick={handleShare}
+<button onClick={handleShare}
             className="flex items-center gap-1.5 text-xs text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 rounded-lg px-3 py-2 hover:bg-emerald-500/20 transition-colors font-semibold">
             <Share2 className="w-3.5 h-3.5" /> Share
           </button>
